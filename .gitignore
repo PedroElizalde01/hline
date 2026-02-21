@@ -1,0 +1,17 @@
+/target/
+/dist/
+
+# Rust
+**/*.rs.bk
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Env / local overrides
+.env
+.env.*
