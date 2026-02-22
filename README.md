@@ -1,17 +1,17 @@
 <div align="center">
 <pre>
-██╗  ██╗██╗     ██╗███╗   ██╗███████╗
-██║  ██║██║     ██║████╗  ██║██╔════╝
+  ██╗  ██╗██╗     ██╗███╗   ██╗███████╗
+  ██║  ██║██║     ██║████╗  ██║██╔════╝
 ███████║██║     ██║██╔██╗ ██║█████╗
 ██╔══██║██║     ██║██║╚██╗██║██╔══╝
-██║  ██║███████╗██║██║ ╚████║███████╗
-╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝
+  ██║  ██║███████╗██║██║ ╚████║███████╗
+  ╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝
 </pre>
 
 Bash history TUI for Linux
 </div>
 
-# hline
+---
 
 `hline` is a Rust TUI to browse Bash history (`~/.bash_history`) with fast navigation, live filtering, sorting, multi-select, and clipboard copy.
 
