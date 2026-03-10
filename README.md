@@ -11,9 +11,7 @@
 Bash history TUI
 </div>
 
----# hline
-
-Bash history TUI for Linux and macOS.
+---
 
 `hline` lets you browse `~/.bash_history` with live filtering, sorting, multi-select, and clipboard copy.
 
