@@ -138,6 +138,11 @@ install -m 0755 "${TMP_DIR}/${ASSET_BASENAME}/${APP_NAME}" "${BIN_DIR}/${APP_NAM
 
 echo
 echo "Installed ${APP_NAME} ${VERSION} to ${BIN_DIR}/${APP_NAME}"
+echo "Run 'hash -r' if your shell still resolves an older cached command."
+if [[ -x "${HOME}/.cargo/bin/${APP_NAME}" && "${HOME}/.cargo/bin/${APP_NAME}" != "${BIN_DIR}/${APP_NAME}" ]]; then
+  echo "Note: found another ${APP_NAME} at ${HOME}/.cargo/bin/${APP_NAME}."
+  echo "If the wrong one runs, check 'type -a ${APP_NAME}' and remove the older install."
+fi
 case ":$PATH:" in
   *":${BIN_DIR}:"*) ;;
   *)
