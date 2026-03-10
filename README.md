@@ -8,97 +8,78 @@
   ╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝
 </pre>
 
-Bash history TUI for Linux
+Bash history TUI
 </div>
 
----
+---# hline
 
-`hline` is a Rust TUI to browse Bash history (`~/.bash_history`) with fast navigation, live filtering, sorting, multi-select, and clipboard copy.
+Bash history TUI for Linux and macOS.
 
-## Features
+`hline` lets you browse `~/.bash_history` with live filtering, sorting, multi-select, and clipboard copy.
 
-- Centered-cursor scrolling for large history files
-- Live search/filter mode (`/`)
-- Sort modes: recency, alphabetical, length (`s` / `S`)
-- Multi-select and copy (`Space`, `a`, `c`, `y`)
-- Custom history path with `--file PATH`
-- Linux-first target
+## Install
 
-## Installation
-
-### From GitHub Releases (recommended)
+Latest release:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PedroElizalde01/hline/main/install.sh | bash
 ```
 
-### Install specific version
+Then run:
+
+```bash
+hline
+```
+
+Install a specific version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PedroElizalde01/hline/main/install.sh | \
-  bash -s -- --repo PedroElizalde01/hline --version v0.1.0 --bin-dir ~/.local/bin
+  bash -s -- --version v0.1.1
 ```
 
-## Build from source
+If `hline` is not found after install, add this to your shell profile:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+## Usage
+
+```bash
+hline
+hline --file /path/to/history
+```
+
+## Keys
+
+- `j` / `k` or arrows: move
+- `Ctrl+d` / `Ctrl+u`: half page
+- `g` / `G`: top / bottom
+- `/`: search
+- `s`: change sort
+- `S`: reverse sort
+- `Space`: select
+- `a`: select shown
+- `c`: clear selection
+- `y`: copy
+- `?`: help
+- `q`: quit
+
+## Build
 
 ```bash
 cargo build --release
 ./target/release/hline --help
-./target/release/hline --version
 ```
 
-Run directly:
+## Release
 
 ```bash
-cargo run
-cargo run -- --file /path/to/history
-```
-
-## Keybindings
-
-- `j` / `Down`: move down
-- `k` / `Up`: move up
-- `Ctrl+d` / `PageDown`: half-page down
-- `Ctrl+u` / `PageUp`: half-page up
-- `g` / `G`: jump top / bottom
-- `Space`: toggle selection
-- `a`: select all shown
-- `c`: clear selection
-- `y`: copy selected (or current if none selected)
-- `/`: enter search mode
-- `Enter`: confirm search
-- `Esc`: exit search/help
-- `s`: cycle sort mode
-- `S`: reverse sort direction
-- `?`: help
-- `q`: quit
-
-## Release artifacts
-
-Naming format:
-
-- `hline-<arch>-<target>.tar.gz`
-- `hline-<arch>-<target>.tar.gz.sha256`
-
-Example:
-
-- `hline-x86_64-unknown-linux-gnu.tar.gz`
-
-## Local release build
-
-```bash
-./scripts/release_local.sh
-ls -lah dist
-```
-
-## Quality checks
-
-```bash
-cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets
+git tag v0.1.1
+git push origin main v0.1.1
 ```
 
 ## License
 
-MIT (`LICENSE`).
+MIT

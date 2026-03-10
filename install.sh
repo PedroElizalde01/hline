@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="hline"
-REPO="${REPO:-<PedroElizalde01>/hline}"
+REPO="${REPO:-PedroElizalde01/hline}"
 VERSION="${VERSION:-}"
 BIN_DIR="${BIN_DIR:-$HOME/.local/bin}"
 HLINE_BASE_URL="${HLINE_BASE_URL:-}"
