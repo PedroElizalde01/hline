@@ -35,7 +35,7 @@ Install a specific version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/PedroElizalde01/hline/main/install.sh | \
-  bash -s -- --version v0.1.1
+  bash -s -- --version v0.1.4
 ```
 
 If `hline` is not found after install, add this to your shell profile:
@@ -76,8 +76,8 @@ cargo build --release
 ## Release
 
 ```bash
-git tag v0.1.1
-git push origin main v0.1.1
+git tag v0.1.4
+git push origin main v0.1.4
 ```
 
 ## License
