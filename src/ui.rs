@@ -1,16 +1,19 @@
 use crate::app::{App, Mode, ToastKind};
+use chrono::{Local, LocalResult, TimeZone};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-const STATUS_HINTS: &str = "y=copy  /=search  s=sort  space=select  q=quit";
+const STATUS_HINTS: &str = "enter=accept  y=copy  /=search  s=sort  space=select  q=quit";
 const HELP_TEXT: &str = "hline keybindings
 
 Navigation: j/k or arrows, Ctrl+d/u, PageDown/PageUp, g/G
 Selection: Space toggle, a select shown, c clear
+Accept: Enter print selected/current command(s) to stdout and quit
 Search: / enter search, Enter confirm, Esc exit
 Search edit: Backspace, Ctrl+w delete word, Ctrl+u clear
+Time filter: after:YYYY-MM-DD before:YYYY-MM-DD on:YYYY-MM-DD
 Sorting: s cycle sort mode, S reverse sort direction
 Copy: y copy selected (or current if none selected)
 Quit: q
@@ -69,6 +72,7 @@ fn render_list(frame: &mut Frame, app: &mut App, list_area: Rect) {
     let total = app.filtered.len();
     let scroll = centered_scroll(app.cursor, total, viewport_h);
     let end = (scroll + viewport_h.max(1)).min(total);
+    let show_timestamps = app.has_timestamps();
 
     let mut items = Vec::with_capacity(end.saturating_sub(scroll));
     for pos in scroll..end {
@@ -79,7 +83,12 @@ fn render_list(frame: &mut Frame, app: &mut App, list_area: Rect) {
         } else {
             "[ ]"
         };
-        items.push(ListItem::new(format!("{checked} {}", entry.cmd)));
+        items.push(ListItem::new(format_entry_label(
+            checked,
+            &entry.cmd,
+            entry.timestamp,
+            show_timestamps,
+        )));
     }
 
     let mut state = ListState::default();
@@ -168,9 +177,33 @@ pub fn centered_scroll(cursor: usize, total: usize, viewport_h: usize) -> usize 
     cursor.saturating_sub(mid).min(max_scroll)
 }
 
+fn format_entry_label(
+    checked: &str,
+    cmd: &str,
+    timestamp: Option<i64>,
+    show_timestamps: bool,
+) -> String {
+    if !show_timestamps {
+        return format!("{checked} {cmd}");
+    }
+
+    let stamp = timestamp
+        .map(format_timestamp)
+        .unwrap_or_else(|| "-------------------".to_string());
+    format!("{checked} {stamp} | {cmd}")
+}
+
+fn format_timestamp(timestamp: i64) -> String {
+    match Local.timestamp_opt(timestamp, 0) {
+        LocalResult::Single(datetime) => datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
+        LocalResult::Ambiguous(datetime, _) => datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
+        LocalResult::None => format!("ts:{timestamp}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::centered_scroll;
+    use super::{centered_scroll, format_entry_label};
 
     #[test]
     fn centered_scroll_stays_zero_when_list_fits() {
@@ -187,5 +220,12 @@ mod tests {
     #[test]
     fn centered_scroll_clamps_near_end() {
         assert_eq!(centered_scroll(9, 10, 4), 6);
+    }
+
+    #[test]
+    fn entry_label_includes_timestamp_when_enabled() {
+        let label = format_entry_label("[ ]", "cargo test", Some(1_700_000_000), true);
+        assert!(label.contains("cargo test"));
+        assert!(label.contains('|'));
     }
 }

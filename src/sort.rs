@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortMode {
     Recency,
+    Timestamp,
     Alpha,
     Length,
 }
@@ -11,7 +12,8 @@ pub enum SortMode {
 impl SortMode {
     pub fn cycle(self) -> Self {
         match self {
-            Self::Recency => Self::Alpha,
+            Self::Recency => Self::Timestamp,
+            Self::Timestamp => Self::Alpha,
             Self::Alpha => Self::Length,
             Self::Length => Self::Recency,
         }
@@ -20,6 +22,7 @@ impl SortMode {
     pub fn label(self) -> &'static str {
         match self {
             Self::Recency => "Recency",
+            Self::Timestamp => "Timestamp",
             Self::Alpha => "Alpha",
             Self::Length => "Length",
         }
@@ -31,6 +34,19 @@ pub fn apply_sort(indices: &mut [usize], entries: &[Entry], mode: SortMode, reve
         SortMode::Recency => {
             indices.sort_unstable_by(|a, b| {
                 let ord = a.cmp(b);
+                if reverse {
+                    ord.reverse()
+                } else {
+                    ord
+                }
+            });
+        }
+        SortMode::Timestamp => {
+            indices.sort_unstable_by(|a, b| {
+                let ord = entries[*b]
+                    .timestamp
+                    .cmp(&entries[*a].timestamp)
+                    .then_with(|| a.cmp(b));
                 if reverse {
                     ord.reverse()
                 } else {
@@ -86,14 +102,20 @@ mod tests {
             Entry {
                 id: 0,
                 cmd: "git status".to_string(),
+                timestamp: Some(1_700_000_010),
+                duration_secs: None,
             },
             Entry {
                 id: 1,
                 cmd: "ls".to_string(),
+                timestamp: None,
+                duration_secs: None,
             },
             Entry {
                 id: 2,
                 cmd: "Cargo test".to_string(),
+                timestamp: Some(1_700_000_500),
+                duration_secs: None,
             },
         ]
     }
@@ -119,6 +141,14 @@ mod tests {
         let entries = sample_entries();
         let mut idx = vec![0, 1, 2];
         apply_sort(&mut idx, &entries, SortMode::Length, true);
+        assert_eq!(idx, vec![2, 0, 1]);
+    }
+
+    #[test]
+    fn sorts_by_timestamp_with_missing_values_last() {
+        let entries = sample_entries();
+        let mut idx = vec![0, 1, 2];
+        apply_sort(&mut idx, &entries, SortMode::Timestamp, false);
         assert_eq!(idx, vec![2, 0, 1]);
     }
 }

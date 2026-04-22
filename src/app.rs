@@ -1,6 +1,7 @@
 use crate::clipboard::ClipboardManager;
 use crate::history::Entry;
 use crate::sort::{apply_sort, SortMode};
+use chrono::{Local, LocalResult, NaiveDate, NaiveDateTime, TimeZone};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -39,6 +40,7 @@ enum NormalAction {
     SelectAllShown,
     ClearSelection,
     Copy,
+    Accept,
     EnterSearch,
     CycleSort,
     ToggleSortDirection,
@@ -66,6 +68,7 @@ pub struct App {
     pub toast: Option<Toast>,
     pub show_help: bool,
     pub should_quit: bool,
+    accepted_output: Option<String>,
     viewport_height: usize,
     clipboard: ClipboardManager,
 }
@@ -85,6 +88,7 @@ impl App {
             toast: None,
             show_help: false,
             should_quit: false,
+            accepted_output: None,
             viewport_height: 10,
             clipboard: ClipboardManager::new(),
         };
@@ -109,6 +113,13 @@ impl App {
     pub fn status_sort_text(&self) -> String {
         let direction = match self.sort {
             SortMode::Recency => {
+                if self.sort_desc {
+                    "oldest-first"
+                } else {
+                    "newest-first"
+                }
+            }
+            SortMode::Timestamp => {
                 if self.sort_desc {
                     "oldest-first"
                 } else {
@@ -140,6 +151,14 @@ impl App {
         } else {
             self.query.as_str()
         }
+    }
+
+    pub fn has_timestamps(&self) -> bool {
+        self.all.iter().any(|entry| entry.timestamp.is_some())
+    }
+
+    pub fn take_accepted_output(&mut self) -> Option<String> {
+        self.accepted_output.take()
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
@@ -181,6 +200,7 @@ impl App {
             NormalAction::SelectAllShown => self.select_all_filtered(),
             NormalAction::ClearSelection => self.clear_selection(),
             NormalAction::Copy => self.copy_current_or_selected(),
+            NormalAction::Accept => self.accept_current_or_selected(),
             NormalAction::EnterSearch => self.mode = Mode::Search,
             NormalAction::CycleSort => {
                 self.sort = self.sort.cycle();
@@ -270,7 +290,7 @@ impl App {
     }
 
     fn copy_current_or_selected(&mut self) {
-        let lines = self.copy_lines_in_selection_order();
+        let lines = self.selected_lines_in_order();
 
         if lines.is_empty() {
             self.set_error_toast("Nothing to copy".to_string());
@@ -289,7 +309,19 @@ impl App {
         }
     }
 
-    fn copy_lines_in_selection_order(&self) -> Vec<&str> {
+    fn accept_current_or_selected(&mut self) {
+        let lines = self.selected_lines_in_order();
+
+        if lines.is_empty() {
+            self.set_error_toast("Nothing to accept".to_string());
+            return;
+        }
+
+        self.accepted_output = Some(lines.join("\n"));
+        self.should_quit = true;
+    }
+
+    fn selected_lines_in_order(&self) -> Vec<&str> {
         if self.selected.is_empty() {
             return self
                 .current_entry()
@@ -329,22 +361,11 @@ impl App {
 
     pub fn rebuild_filtered(&mut self) {
         self.filtered.clear();
+        let filters = ParsedQuery::parse(&self.query);
 
-        if self.query.is_empty() {
-            self.filtered.extend(0..self.all.len());
-        } else if self.query.is_ascii() {
-            let needle = self.query.as_bytes();
-            for (idx, entry) in self.all.iter().enumerate() {
-                if contains_ascii_case_insensitive(entry.cmd.as_bytes(), needle) {
-                    self.filtered.push(idx);
-                }
-            }
-        } else {
-            let needle = self.query.to_lowercase();
-            for (idx, entry) in self.all.iter().enumerate() {
-                if entry.cmd.to_lowercase().contains(&needle) {
-                    self.filtered.push(idx);
-                }
+        for (idx, entry) in self.all.iter().enumerate() {
+            if filters.matches(entry) {
+                self.filtered.push(idx);
             }
         }
 
@@ -404,6 +425,7 @@ fn normal_action_for_key(key: KeyEvent) -> Option<NormalAction> {
     match key.code {
         KeyCode::Char('q') => Some(NormalAction::Quit),
         KeyCode::Char('?') => Some(NormalAction::ToggleHelp),
+        KeyCode::Enter => Some(NormalAction::Accept),
         KeyCode::Char('j') | KeyCode::Down => Some(NormalAction::Move(1)),
         KeyCode::Char('k') | KeyCode::Up => Some(NormalAction::Move(-1)),
         KeyCode::Char('g') => Some(NormalAction::JumpTop),
@@ -463,6 +485,124 @@ fn contains_ascii_case_insensitive(haystack: &[u8], needle: &[u8]) -> bool {
         .any(|window| window.eq_ignore_ascii_case(needle))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedQuery {
+    text: String,
+    after: Option<i64>,
+    before: Option<i64>,
+}
+
+impl ParsedQuery {
+    fn parse(query: &str) -> Self {
+        let mut text_tokens = Vec::new();
+        let mut after = None;
+        let mut before = None;
+
+        for token in query.split_whitespace() {
+            if let Some(value) = token
+                .strip_prefix("after:")
+                .or_else(|| token.strip_prefix("since:"))
+            {
+                if let Some(timestamp) = parse_time_value(value, false) {
+                    after = Some(after.map_or(timestamp, |current: i64| current.max(timestamp)));
+                    continue;
+                }
+            }
+
+            if let Some(value) = token
+                .strip_prefix("before:")
+                .or_else(|| token.strip_prefix("until:"))
+            {
+                if let Some(timestamp) = parse_time_value(value, true) {
+                    before = Some(before.map_or(timestamp, |current: i64| current.min(timestamp)));
+                    continue;
+                }
+            }
+
+            if let Some(value) = token.strip_prefix("on:") {
+                if let Some((start, end)) = parse_day_range(value) {
+                    after = Some(after.map_or(start, |current: i64| current.max(start)));
+                    before = Some(before.map_or(end, |current: i64| current.min(end)));
+                    continue;
+                }
+            }
+
+            text_tokens.push(token);
+        }
+
+        Self {
+            text: text_tokens.join(" "),
+            after,
+            before,
+        }
+    }
+
+    fn matches(&self, entry: &Entry) -> bool {
+        if let Some(after) = self.after {
+            let Some(timestamp) = entry.timestamp else {
+                return false;
+            };
+            if timestamp < after {
+                return false;
+            }
+        }
+
+        if let Some(before) = self.before {
+            let Some(timestamp) = entry.timestamp else {
+                return false;
+            };
+            if timestamp > before {
+                return false;
+            }
+        }
+
+        if self.text.is_empty() {
+            return true;
+        }
+
+        if self.text.is_ascii() {
+            contains_ascii_case_insensitive(entry.cmd.as_bytes(), self.text.as_bytes())
+        } else {
+            entry.cmd.to_lowercase().contains(&self.text.to_lowercase())
+        }
+    }
+}
+
+fn parse_time_value(value: &str, end_of_day: bool) -> Option<i64> {
+    if let Ok(timestamp) = value.parse::<i64>() {
+        return Some(timestamp);
+    }
+
+    for format in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"] {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(value, format) {
+            return local_timestamp(naive);
+        }
+    }
+
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()?;
+    let naive = if end_of_day {
+        date.and_hms_opt(23, 59, 59)?
+    } else {
+        date.and_hms_opt(0, 0, 0)?
+    };
+    local_timestamp(naive)
+}
+
+fn parse_day_range(value: &str) -> Option<(i64, i64)> {
+    let date = NaiveDate::parse_from_str(value, "%Y-%m-%d").ok()?;
+    let start = local_timestamp(date.and_hms_opt(0, 0, 0)?)?;
+    let end = local_timestamp(date.and_hms_opt(23, 59, 59)?)?;
+    Some((start, end))
+}
+
+fn local_timestamp(naive: NaiveDateTime) -> Option<i64> {
+    match Local.from_local_datetime(&naive) {
+        LocalResult::Single(datetime) => Some(datetime.timestamp()),
+        LocalResult::Ambiguous(first, _) => Some(first.timestamp()),
+        LocalResult::None => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -471,6 +611,17 @@ mod tests {
         Entry {
             id,
             cmd: cmd.to_string(),
+            timestamp: None,
+            duration_secs: None,
+        }
+    }
+
+    fn mk_timed_entry(id: u64, cmd: &str, timestamp: i64) -> Entry {
+        Entry {
+            id,
+            cmd: cmd.to_string(),
+            timestamp: Some(timestamp),
+            duration_secs: None,
         }
     }
 
@@ -551,15 +702,12 @@ mod tests {
         app.select_entry_by_id(2);
         app.select_entry_by_id(0);
 
-        assert_eq!(
-            app.copy_lines_in_selection_order(),
-            vec!["oldest", "newest"]
-        );
+        assert_eq!(app.selected_lines_in_order(), vec!["oldest", "newest"]);
 
         app.selected.clear();
         app.selected_order.clear();
         app.cursor = 1;
-        assert_eq!(app.copy_lines_in_selection_order(), vec!["middle"]);
+        assert_eq!(app.selected_lines_in_order(), vec!["middle"]);
     }
 
     #[test]
@@ -569,5 +717,42 @@ mod tests {
         app.handle_key(key(KeyCode::Char('/')));
 
         assert_eq!(app.mode, Mode::Search);
+    }
+
+    #[test]
+    fn enter_accepts_current_line_and_quits() {
+        let mut app = App::new(vec![mk_entry(0, "echo hi")]);
+
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(app.should_quit);
+        assert_eq!(app.take_accepted_output(), Some("echo hi".to_string()));
+    }
+
+    #[test]
+    fn time_filters_apply_alongside_text_search() {
+        let mut app = App::new(vec![
+            mk_timed_entry(0, "cargo test", 1_700_000_000),
+            mk_timed_entry(1, "git status", 1_700_100_000),
+            mk_entry(2, "cargo fmt"),
+        ]);
+
+        app.query = "cargo after:2023-11-14 before:2023-11-15".to_string();
+        app.rebuild_filtered();
+
+        assert_eq!(app.filtered, vec![0]);
+    }
+
+    #[test]
+    fn on_filter_excludes_entries_without_timestamps() {
+        let mut app = App::new(vec![
+            mk_timed_entry(0, "cargo test", 1_700_000_000),
+            mk_entry(1, "cargo fmt"),
+        ]);
+
+        app.query = "on:2023-11-14".to_string();
+        app.rebuild_filtered();
+
+        assert_eq!(app.filtered, vec![0]);
     }
 }

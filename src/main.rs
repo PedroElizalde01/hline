@@ -12,10 +12,11 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
-use history::{default_history_path, load_history};
+use history::{default_history_path, load_history, HistoryFormat};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
-use std::io::{self, Stdout};
+use std::fs::{File, OpenOptions};
+use std::io::{self, IsTerminal, Stdout, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -24,16 +25,23 @@ use std::time::Duration;
     name = "hline",
     author,
     version,
-    about = "Browse bash history in a centered-cursor TUI",
+    about = "Browse shell history in a centered-cursor TUI",
     long_about = None
 )]
 struct Cli {
     #[arg(long, value_name = "PATH")]
     file: Option<PathBuf>,
+    #[arg(long, value_enum, default_value_t = HistoryFormat::Auto)]
+    format: HistoryFormat,
+}
+
+enum TerminalWriter {
+    Stdout(Stdout),
+    Tty(File),
 }
 
 struct TerminalSession {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
+    terminal: Terminal<CrosstermBackend<TerminalWriter>>,
     restored: bool,
 }
 
@@ -41,12 +49,12 @@ impl TerminalSession {
     fn start() -> Result<Self> {
         enable_raw_mode().context("failed to enable raw mode")?;
 
-        let mut stdout = io::stdout();
-        stdout
+        let mut writer = terminal_writer()?;
+        writer
             .execute(EnterAlternateScreen)
             .context("failed to enter alternate screen")?;
 
-        let backend = CrosstermBackend::new(stdout);
+        let backend = CrosstermBackend::new(writer);
         let mut terminal =
             Terminal::new(backend).context("failed to initialize terminal backend")?;
         terminal.clear().context("failed to clear terminal")?;
@@ -57,7 +65,7 @@ impl TerminalSession {
         })
     }
 
-    fn terminal_mut(&mut self) -> &mut Terminal<CrosstermBackend<Stdout>> {
+    fn terminal_mut(&mut self) -> &mut Terminal<CrosstermBackend<TerminalWriter>> {
         &mut self.terminal
     }
 
@@ -95,23 +103,56 @@ impl Drop for TerminalSession {
     }
 }
 
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let path = cli.file.unwrap_or_else(default_history_path);
-    let entries = load_history(&path)
-        .with_context(|| format!("failed loading history from {}", path.display()))?;
+impl Write for TerminalWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdout(stdout) => stdout.write(buf),
+            Self::Tty(tty) => tty.write(buf),
+        }
+    }
 
-    run_tui(App::new(entries))
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Stdout(stdout) => stdout.flush(),
+            Self::Tty(tty) => tty.flush(),
+        }
+    }
 }
 
-fn run_tui(mut app: App) -> Result<()> {
+fn terminal_writer() -> Result<TerminalWriter> {
+    if io::stdout().is_terminal() {
+        Ok(TerminalWriter::Stdout(io::stdout()))
+    } else {
+        let tty = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")
+            .context("failed to open /dev/tty for interactive output")?;
+        Ok(TerminalWriter::Tty(tty))
+    }
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    let path = cli.file.unwrap_or_else(|| default_history_path(cli.format));
+    let entries = load_history(&path, cli.format)
+        .with_context(|| format!("failed loading history from {}", path.display()))?;
+
+    if let Some(output) = run_tui(App::new(entries))? {
+        println!("{output}");
+    }
+
+    Ok(())
+}
+
+fn run_tui(mut app: App) -> Result<Option<String>> {
     let mut session = TerminalSession::start()?;
 
     let run_result = run_app(session.terminal_mut(), &mut app);
     let restore_result = session.restore();
 
     match (run_result, restore_result) {
-        (Ok(_), Ok(_)) => Ok(()),
+        (Ok(_), Ok(_)) => Ok(app.take_accepted_output()),
         (Err(run_err), Ok(_)) => Err(run_err),
         (Ok(_), Err(restore_err)) => Err(restore_err),
         (Err(run_err), Err(restore_err)) => Err(anyhow::anyhow!(
@@ -120,7 +161,7 @@ fn run_tui(mut app: App) -> Result<()> {
     }
 }
 
-fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> Result<()> {
+fn run_app(terminal: &mut Terminal<CrosstermBackend<TerminalWriter>>, app: &mut App) -> Result<()> {
     let tick_rate = Duration::from_millis(100);
 
     loop {
