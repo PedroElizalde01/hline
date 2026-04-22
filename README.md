@@ -15,7 +15,7 @@ Shell history TUI
 
 Shell history TUI for Linux and macOS.
 
-`hline` lets you browse Bash, Zsh, and Fish history with live filtering, timestamp-aware sorting, multi-select, clipboard copy, and stdout accept flow for shell widgets.
+`hline` lets you browse Bash, Zsh, and Fish history with live filtering, timestamp-aware sorting, multi-select, clipboard copy, persisted favorites, and stdout accept flow for shell widgets.
 
 ## Install
 
@@ -67,7 +67,11 @@ By default `hline` auto-detects the history format and chooses a default history
 - `Space`: select
 - `a`: select shown
 - `c`: clear selection
-- `y`: copy
+- `y`: copy selected/current item
+- `Y`: copy current line
+- `f`: save selected/current command block as favorite
+- `F`: toggle favorites view
+- `J` / `K` or `Shift+Up` / `Shift+Down`: jump by favorite block
 - `Enter`: print selected/current command(s) to stdout and quit
 - `?`: help
 - `q`: quit
@@ -89,6 +93,20 @@ Examples:
 ```
 
 Timestamped entries are shown in the list when the loaded history format provides them.
+
+## Favorites
+
+Press `f` in history view to save current line or current multi-selection as one favorite block. Favorites are persisted on disk in `~/.config/hline/favorites.json` unless `XDG_CONFIG_HOME` is set.
+
+Press `F` to open favorites view:
+
+- `y` copies whole favorite block
+- `Y` copies current line inside favorite block
+- `Enter` accepts whole favorite block to stdout
+- `j` / `k` move line by line
+- `J` / `K` or `Shift+Up` / `Shift+Down` jump favorite-to-favorite
+
+Favorites search matches any line in each saved block and shows whole matching blocks.
 
 ## Shell Integration
 

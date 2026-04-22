@@ -15,6 +15,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Bash, Zsh, and Fish history parsing with configurable format selection
 - Timestamp-aware history entries, timestamp sorting, and time-based search filters
 - `Enter` accept flow that writes selected/current commands to stdout for shell integration
+- Persisted favorites blocks with dedicated favorites view, whole-block copy, single-line copy, and block-jump navigation
 
 ## [0.1.0] - 2026-02-21
 

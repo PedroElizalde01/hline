@@ -1,21 +1,21 @@
-use crate::app::{App, Mode, ToastKind};
+use crate::app::{App, FavoriteRow, Mode, ToastKind, View};
 use chrono::{Local, LocalResult, TimeZone};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::Frame;
 
-const STATUS_HINTS: &str = "enter=accept  y=copy  /=search  s=sort  space=select  q=quit";
 const HELP_TEXT: &str = "hline keybindings
 
-Navigation: j/k or arrows, Ctrl+d/u, PageDown/PageUp, g/G
-Selection: Space toggle, a select shown, c clear
-Accept: Enter print selected/current command(s) to stdout and quit
+Views: F toggle history/favorites
+History: Space toggle, a select shown, c clear, f save selected/current as favorite
+Favorites: y copy whole block, Y copy current line, J/K or Shift+Up/Down jump blocks
+Accept: Enter print selected/current item to stdout and quit
 Search: / enter search, Enter confirm, Esc exit
 Search edit: Backspace, Ctrl+w delete word, Ctrl+u clear
 Time filter: after:YYYY-MM-DD before:YYYY-MM-DD on:YYYY-MM-DD
-Sorting: s cycle sort mode, S reverse sort direction
-Copy: y copy selected (or current if none selected)
+Sorting: s cycle sort mode, S reverse sort direction (history only)
+Copy: y copy selected/current item
 Quit: q
 
 Close help: Esc or ?";
@@ -57,42 +57,37 @@ fn split_layout(area: Rect, mode: Mode) -> Vec<Rect> {
 }
 
 fn render_list(frame: &mut Frame, app: &mut App, list_area: Rect) {
-    let list_block = Block::default().title("hline").borders(Borders::ALL);
+    let list_block = Block::default()
+        .title(app.list_title())
+        .borders(Borders::ALL);
     let viewport_h = list_area.height.saturating_sub(2) as usize;
     app.set_viewport_height(viewport_h);
 
-    if app.filtered.is_empty() {
-        let empty = Paragraph::new("No matches")
+    let total = app.visible_count();
+    if total == 0 {
+        let message = match app.view {
+            View::History => "No matches",
+            View::Favorites => "No favorites",
+        };
+        let empty = Paragraph::new(message)
             .block(list_block)
             .alignment(Alignment::Center);
         frame.render_widget(empty, list_area);
         return;
     }
 
-    let total = app.filtered.len();
-    let scroll = centered_scroll(app.cursor, total, viewport_h);
+    let cursor = app.active_cursor();
+    let scroll = centered_scroll(cursor, total, viewport_h);
     let end = (scroll + viewport_h.max(1)).min(total);
     let show_timestamps = app.has_timestamps();
 
-    let mut items = Vec::with_capacity(end.saturating_sub(scroll));
-    for pos in scroll..end {
-        let idx = app.filtered[pos];
-        let entry = &app.all[idx];
-        let checked = if app.selected.contains(&entry.id) {
-            "[x]"
-        } else {
-            "[ ]"
-        };
-        items.push(ListItem::new(format_entry_label(
-            checked,
-            &entry.cmd,
-            entry.timestamp,
-            show_timestamps,
-        )));
-    }
+    let items = match app.view {
+        View::History => render_history_rows(app, scroll, end, show_timestamps),
+        View::Favorites => render_favorite_rows(app, scroll, end),
+    };
 
     let mut state = ListState::default();
-    state.select(Some(app.cursor.saturating_sub(scroll)));
+    state.select(Some(cursor.saturating_sub(scroll)));
 
     let list = List::new(items)
         .block(list_block)
@@ -102,16 +97,77 @@ fn render_list(frame: &mut Frame, app: &mut App, list_area: Rect) {
     frame.render_stateful_widget(list, list_area, &mut state);
 }
 
+fn render_history_rows(
+    app: &App,
+    scroll: usize,
+    end: usize,
+    show_timestamps: bool,
+) -> Vec<ListItem<'static>> {
+    let mut items = Vec::with_capacity(end.saturating_sub(scroll));
+    for pos in scroll..end {
+        let idx = app.filtered[pos];
+        let entry = &app.all[idx];
+        let checked = if app.selected.contains(&entry.id) {
+            "[x]"
+        } else {
+            "[ ]"
+        };
+        items.push(ListItem::new(format_history_label(
+            checked,
+            &entry.cmd,
+            entry.timestamp,
+            show_timestamps,
+        )));
+    }
+    items
+}
+
+fn render_favorite_rows(app: &App, scroll: usize, end: usize) -> Vec<ListItem<'static>> {
+    let mut items = Vec::with_capacity(end.saturating_sub(scroll));
+    for pos in scroll..end {
+        let row = app.favorite_rows[pos];
+        items.push(ListItem::new(format_favorite_label(app, row)));
+    }
+    items
+}
+
+fn format_favorite_label(app: &App, row: FavoriteRow) -> String {
+    let Some(block) = app.favorite_block(row.block_index) else {
+        return "[ ] missing favorite".to_string();
+    };
+    match row.line_index {
+        None => {
+            let suffix = if block.lines.len() == 1 { "" } else { "s" };
+            format!(
+                "[ ] favorite {} ({} line{})",
+                block.id,
+                block.lines.len(),
+                suffix
+            )
+        }
+        Some(line_index) => format!("    [ ] {}", block.lines[line_index]),
+    }
+}
+
 fn render_status(frame: &mut Frame, app: &App, status_area: Rect) {
-    let mut status = format!(
-        "sort: {} | filter: {} | {} total | {} shown | {} selected | {}",
-        app.status_sort_text(),
-        app.status_filter_text(),
-        app.all.len(),
-        app.filtered.len(),
-        app.selected.len(),
-        STATUS_HINTS,
-    );
+    let mut status = match app.view {
+        View::History => format!(
+            "{} | filter: {} | {} total | {} shown | {} selected | {}",
+            app.status_context_text(),
+            app.status_filter_text(),
+            app.total_count(),
+            app.visible_count(),
+            app.selected.len(),
+            app.status_hint_text(),
+        ),
+        View::Favorites => format!(
+            "{} | filter: {} | {} rows shown | {}",
+            app.status_context_text(),
+            app.status_filter_text(),
+            app.visible_count(),
+            app.status_hint_text(),
+        ),
+    };
 
     let mut status_style = Style::default().bg(Color::DarkGray).fg(Color::White);
     if let Some(toast) = &app.toast {
@@ -177,7 +233,7 @@ pub fn centered_scroll(cursor: usize, total: usize, viewport_h: usize) -> usize 
     cursor.saturating_sub(mid).min(max_scroll)
 }
 
-fn format_entry_label(
+fn format_history_label(
     checked: &str,
     cmd: &str,
     timestamp: Option<i64>,
@@ -203,7 +259,10 @@ fn format_timestamp(timestamp: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{centered_scroll, format_entry_label};
+    use super::{centered_scroll, format_favorite_label, format_history_label};
+    use crate::app::{App, FavoriteRow};
+    use crate::favorites::FavoritesStore;
+    use crate::history::Entry;
 
     #[test]
     fn centered_scroll_stays_zero_when_list_fits() {
@@ -224,8 +283,37 @@ mod tests {
 
     #[test]
     fn entry_label_includes_timestamp_when_enabled() {
-        let label = format_entry_label("[ ]", "cargo test", Some(1_700_000_000), true);
+        let label = format_history_label("[ ]", "cargo test", Some(1_700_000_000), true);
         assert!(label.contains("cargo test"));
         assert!(label.contains('|'));
+    }
+
+    #[test]
+    fn favorite_label_indents_lines() {
+        let mut favorites = FavoritesStore::new_in_memory();
+        favorites
+            .add_block(vec![
+                "npm run db:migrate".to_string(),
+                "npx prisma generate".to_string(),
+            ])
+            .expect("add favorite");
+        let app = App::with_favorites(
+            vec![Entry {
+                id: 0,
+                cmd: "echo hi".to_string(),
+                timestamp: None,
+                duration_secs: None,
+            }],
+            favorites,
+        );
+
+        let label = format_favorite_label(
+            &app,
+            FavoriteRow {
+                block_index: 0,
+                line_index: Some(1),
+            },
+        );
+        assert!(label.starts_with("    [ ] "));
     }
 }

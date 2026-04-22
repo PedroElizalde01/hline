@@ -1,5 +1,6 @@
 mod app;
 mod clipboard;
+mod favorites;
 mod history;
 mod sort;
 mod ui;
@@ -12,6 +13,7 @@ use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
 use crossterm::ExecutableCommand;
+use favorites::FavoritesStore;
 use history::{default_history_path, load_history, HistoryFormat};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -137,8 +139,9 @@ fn main() -> Result<()> {
     let path = cli.file.unwrap_or_else(|| default_history_path(cli.format));
     let entries = load_history(&path, cli.format)
         .with_context(|| format!("failed loading history from {}", path.display()))?;
+    let favorites = FavoritesStore::load_default().context("failed loading favorites")?;
 
-    if let Some(output) = run_tui(App::new(entries))? {
+    if let Some(output) = run_tui(App::with_favorites(entries, favorites))? {
         println!("{output}");
     }
 
