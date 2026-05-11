@@ -4,6 +4,7 @@ mod favorites;
 mod history;
 mod sort;
 mod ui;
+mod update;
 
 use anyhow::{Context, Result};
 use app::App;
@@ -31,10 +32,17 @@ use std::time::Duration;
     long_about = None
 )]
 struct Cli {
-    #[arg(long, value_name = "PATH")]
+    #[arg(long, value_name = "PATH", help = "History file to load")]
     file: Option<PathBuf>,
-    #[arg(long, value_enum, default_value_t = HistoryFormat::Auto)]
+    #[arg(long, value_enum, default_value_t = HistoryFormat::Auto, help = "History format")]
     format: HistoryFormat,
+    #[arg(
+        long,
+        help = "Check GitHub Releases for a newer hline version and exit"
+    )]
+    check_updates: bool,
+    #[arg(long, help = "Skip the automatic daily update check")]
+    no_update_check: bool,
 }
 
 enum TerminalWriter {
@@ -136,6 +144,12 @@ fn terminal_writer() -> Result<TerminalWriter> {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+
+    if cli.check_updates {
+        update::print_update_check()?;
+        return Ok(());
+    }
+
     let path = cli.file.unwrap_or_else(|| default_history_path(cli.format));
     let entries = load_history(&path, cli.format)
         .with_context(|| format!("failed loading history from {}", path.display()))?;
@@ -143,6 +157,10 @@ fn main() -> Result<()> {
 
     if let Some(output) = run_tui(App::with_favorites(entries, favorites))? {
         println!("{output}");
+    }
+
+    if !cli.no_update_check {
+        update::maybe_print_update_notice();
     }
 
     Ok(())

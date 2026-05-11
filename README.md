@@ -52,9 +52,15 @@ hline --file /path/to/history
 hline --format bash
 hline --format zsh --file ~/.zsh_history
 hline --format fish --file ~/.local/share/fish/fish_history
+hline --check-updates
+hline --no-update-check
 ```
 
 By default `hline` auto-detects the history format and chooses a default history file from your shell when possible.
+
+`hline` checks GitHub Releases for updates at most once per day and caches the result in
+`~/.cache/hline/update.json` unless `XDG_CACHE_HOME` is set. Update notices are written to stderr
+so accepted commands remain clean on stdout for shell widgets.
 
 ## Keys
 
