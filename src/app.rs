@@ -183,7 +183,7 @@ impl App {
                 "enter=accept  y=copy  f=save fav  F=favorites  /=search  s=sort  space=select  q=quit"
             }
             View::Favorites => {
-                "enter=accept fav  y=copy fav  Y=copy line  J/K=block  F=history  /=search  q=quit"
+                "enter=accept fav  f=unfavorite  y=copy fav  Y=copy line  J/K=block  F=history  /=search  q=quit"
             }
         }
     }
@@ -538,7 +538,7 @@ impl App {
 
     fn save_current_or_selected_favorite(&mut self) {
         if !matches!(self.view, View::History) {
-            self.set_info_toast("Already in favorites view".to_string());
+            self.remove_current_favorite();
             return;
         }
 
@@ -554,6 +554,22 @@ impl App {
             Ok(AddFavoriteResult::Empty) => {
                 self.set_error_toast("Nothing to favorite".to_string());
             }
+            Err(err) => self.set_error_toast(format!("Favorites error: {err}")),
+        }
+    }
+
+    fn remove_current_favorite(&mut self) {
+        let Some(row) = self.current_favorite_row() else {
+            self.set_error_toast("No favorite selected".to_string());
+            return;
+        };
+
+        match self.favorites.remove_block(row.block_index) {
+            Ok(Some(_)) => {
+                self.rebuild_favorite_rows();
+                self.set_info_toast("Removed favorite".to_string());
+            }
+            Ok(None) => self.set_error_toast("No favorite selected".to_string()),
             Err(err) => self.set_error_toast(format!("Favorites error: {err}")),
         }
     }
@@ -1114,6 +1130,28 @@ mod tests {
             app.take_accepted_output(),
             Some("npm run db:migrate\nnpx prisma generate".to_string())
         );
+    }
+
+    #[test]
+    fn pressing_f_in_favorites_view_removes_current_block() {
+        let mut favorites = FavoritesStore::new_in_memory();
+        favorites
+            .add_block(vec!["one".to_string(), "two".to_string()])
+            .expect("add favorite 1");
+        favorites
+            .add_block(vec!["three".to_string()])
+            .expect("add favorite 2");
+        let mut app = App::with_favorites(vec![mk_entry(0, "echo hi")], favorites);
+
+        app.handle_key(key(KeyCode::Char('F')));
+        app.handle_key(key(KeyCode::Char('J')));
+        assert_eq!(app.favorite_rows[app.favorite_cursor].block_index, 1);
+
+        app.handle_key(key(KeyCode::Char('f')));
+
+        assert_eq!(app.favorites.blocks.len(), 1);
+        assert_eq!(app.favorites.blocks[0].lines, vec!["three"]);
+        assert!(app.favorite_cursor < app.favorite_rows.len());
     }
 
     #[test]

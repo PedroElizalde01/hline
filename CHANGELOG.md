@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+- `f` in favorites view now removes the current favorite block (previously there was no way to unfavorite)
+- Release workflow now fails if the tag does not match the `Cargo.toml` version, preventing releases that report a stale version and trigger endless update notices
+
 ### Added
 - Local release packaging script (`scripts/release_local.sh`)
 - Installer script for GitHub Releases (`install.sh`)

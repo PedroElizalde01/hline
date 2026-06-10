@@ -83,6 +83,16 @@ impl FavoritesStore {
         Ok(AddFavoriteResult::Added(id))
     }
 
+    pub fn remove_block(&mut self, block_index: usize) -> Result<Option<FavoriteBlock>> {
+        if block_index >= self.blocks.len() {
+            return Ok(None);
+        }
+
+        let removed = self.blocks.remove(block_index);
+        self.persist()?;
+        Ok(Some(removed))
+    }
+
     fn persist(&self) -> Result<()> {
         let Some(path) = &self.path else {
             return Ok(());
@@ -151,6 +161,31 @@ mod tests {
             AddFavoriteResult::Duplicate(1)
         );
         assert_eq!(store.blocks.len(), 1);
+    }
+
+    #[test]
+    fn remove_block_deletes_and_persists() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("favorites.json");
+
+        let mut store = FavoritesStore::load_from_path(path.clone()).expect("load empty");
+        store
+            .add_block(vec!["first".to_string()])
+            .expect("add first");
+        store
+            .add_block(vec!["second".to_string()])
+            .expect("add second");
+
+        let removed = store.remove_block(0).expect("remove");
+        assert_eq!(
+            removed.map(|block| block.lines),
+            Some(vec!["second".to_string()])
+        );
+        assert!(store.remove_block(5).expect("out of range").is_none());
+
+        let loaded = FavoritesStore::load_from_path(path).expect("reload");
+        assert_eq!(loaded.blocks.len(), 1);
+        assert_eq!(loaded.blocks[0].lines, vec!["first"]);
     }
 
     #[test]

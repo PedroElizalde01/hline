@@ -79,7 +79,7 @@ fn default_history_path_auto() -> PathBuf {
         Some("zsh") => zsh_history_path(),
         Some("fish") => fish_history_path(),
         Some("bash") => bash_history_path(),
-        _ => first_existing_history_path().unwrap_or_else(|| bash_history_path()),
+        _ => first_existing_history_path().unwrap_or_else(bash_history_path),
     }
 }
 

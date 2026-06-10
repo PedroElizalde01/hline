@@ -9,7 +9,7 @@ const HELP_TEXT: &str = "hline keybindings
 
 Views: F toggle history/favorites
 History: Space toggle, a select shown, c clear, f save selected/current as favorite
-Favorites: y copy whole block, Y copy current line, J/K or Shift+Up/Down jump blocks
+Favorites: f remove favorite, y copy whole block, Y copy current line, J/K or Shift+Up/Down jump blocks
 Accept: Enter print selected/current item to stdout and quit
 Search: / enter search, Enter confirm, Esc exit
 Search edit: Backspace, Ctrl+w delete word, Ctrl+u clear
