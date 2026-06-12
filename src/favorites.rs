@@ -6,7 +6,17 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FavoriteBlock {
     pub id: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub lines: Vec<String>,
+}
+
+impl FavoriteBlock {
+    pub fn display_title(&self) -> String {
+        self.title
+            .clone()
+            .unwrap_or_else(|| format!("favorite {}", self.id))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,7 +88,14 @@ impl FavoritesStore {
             .unwrap_or(0)
             .saturating_add(1);
 
-        self.blocks.insert(0, FavoriteBlock { id, lines });
+        self.blocks.insert(
+            0,
+            FavoriteBlock {
+                id,
+                title: None,
+                lines,
+            },
+        );
         self.persist()?;
         Ok(AddFavoriteResult::Added(id))
     }
@@ -91,6 +108,16 @@ impl FavoritesStore {
         let removed = self.blocks.remove(block_index);
         self.persist()?;
         Ok(Some(removed))
+    }
+
+    pub fn rename_block(&mut self, block_index: usize, title: Option<String>) -> Result<bool> {
+        let Some(block) = self.blocks.get_mut(block_index) else {
+            return Ok(false);
+        };
+
+        block.title = title;
+        self.persist()?;
+        Ok(true)
     }
 
     fn persist(&self) -> Result<()> {
@@ -186,6 +213,27 @@ mod tests {
         let loaded = FavoritesStore::load_from_path(path).expect("reload");
         assert_eq!(loaded.blocks.len(), 1);
         assert_eq!(loaded.blocks[0].lines, vec!["first"]);
+    }
+
+    #[test]
+    fn rename_persists_title_and_loads_old_files_without_one() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("favorites.json");
+
+        let mut store = FavoritesStore::load_from_path(path.clone()).expect("load empty");
+        store
+            .add_block(vec!["cargo build".to_string()])
+            .expect("add");
+        assert_eq!(store.blocks[0].display_title(), "favorite 1");
+
+        assert!(store
+            .rename_block(0, Some("build stuff".to_string()))
+            .expect("rename"));
+        assert!(!store.rename_block(5, None).expect("out of range"));
+
+        let loaded = FavoritesStore::load_from_path(path).expect("reload");
+        assert_eq!(loaded.blocks[0].title.as_deref(), Some("build stuff"));
+        assert_eq!(loaded.blocks[0].display_title(), "build stuff");
     }
 
     #[test]

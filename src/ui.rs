@@ -9,7 +9,7 @@ const HELP_TEXT: &str = "hline keybindings
 
 Views: F toggle history/favorites
 History: Space toggle, a select shown, c clear, f save selected/current as favorite
-Favorites: f remove favorite, y copy whole block, Y copy current line, J/K or Shift+Up/Down jump blocks
+Favorites: f remove favorite, r rename favorite, y copy whole block, Y copy current line, J/K or Shift+Up/Down jump blocks
 Accept: Enter print selected/current item to stdout and quit
 Search: / enter search, Enter confirm, Esc exit
 Search edit: Backspace, Ctrl+w delete word, Ctrl+u clear
@@ -20,15 +20,40 @@ Quit: q
 
 Close help: Esc or ?";
 
+const PREVIEW_MIN_WIDTH: u16 = 100;
+const PREVIEW_MIN_HEIGHT: u16 = 10;
+
 pub fn draw(frame: &mut Frame, app: &mut App) {
     let area = frame.size();
     let chunks = split_layout(area, app.mode);
 
-    render_list(frame, app, chunks[0]);
+    let preview = if area.width >= PREVIEW_MIN_WIDTH && area.height >= PREVIEW_MIN_HEIGHT {
+        app.copy_preview()
+    } else {
+        None
+    };
+
+    let (list_area, preview_area) = if preview.is_some() {
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
+            .split(chunks[0]);
+        (columns[0], Some(columns[1]))
+    } else {
+        (chunks[0], None)
+    };
+
+    render_list(frame, app, list_area);
+    if let (Some((title, lines)), Some(preview_area)) = (preview, preview_area) {
+        render_preview(frame, title, lines, preview_area);
+    }
+
     render_status(frame, app, chunks[1]);
 
-    if matches!(app.mode, Mode::Search) {
-        render_search_prompt(frame, app, chunks[2]);
+    match app.mode {
+        Mode::Search => render_search_prompt(frame, app, chunks[2]),
+        Mode::Rename => render_rename_prompt(frame, app, chunks[2]),
+        Mode::Normal => {}
     }
 
     if app.show_help {
@@ -37,7 +62,7 @@ pub fn draw(frame: &mut Frame, app: &mut App) {
 }
 
 fn split_layout(area: Rect, mode: Mode) -> Vec<Rect> {
-    if matches!(mode, Mode::Search) {
+    if matches!(mode, Mode::Search | Mode::Rename) {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -139,14 +164,22 @@ fn format_favorite_label(app: &App, row: FavoriteRow) -> String {
         None => {
             let suffix = if block.lines.len() == 1 { "" } else { "s" };
             format!(
-                "[ ] favorite {} ({} line{})",
-                block.id,
+                "[ ] {} ({} line{})",
+                block.display_title(),
                 block.lines.len(),
                 suffix
             )
         }
         Some(line_index) => format!("    [ ] {}", block.lines[line_index]),
     }
+}
+
+fn render_preview(frame: &mut Frame, title: String, lines: Vec<String>, preview_area: Rect) {
+    let block = Block::default().title(title).borders(Borders::ALL);
+    let paragraph = Paragraph::new(lines.join("\n"))
+        .block(block)
+        .alignment(Alignment::Left);
+    frame.render_widget(paragraph, preview_area);
 }
 
 fn render_status(frame: &mut Frame, app: &App, status_area: Rect) {
@@ -186,6 +219,12 @@ fn render_status(frame: &mut Frame, app: &App, status_area: Rect) {
 
 fn render_search_prompt(frame: &mut Frame, app: &App, prompt_area: Rect) {
     let prompt = Paragraph::new(format!("/{}", app.query))
+        .style(Style::default().bg(Color::Black).fg(Color::Yellow));
+    frame.render_widget(prompt, prompt_area);
+}
+
+fn render_rename_prompt(frame: &mut Frame, app: &App, prompt_area: Rect) {
+    let prompt = Paragraph::new(format!("rename: {}", app.rename_input))
         .style(Style::default().bg(Color::Black).fg(Color::Yellow));
     frame.render_widget(prompt, prompt_area);
 }

@@ -14,6 +14,7 @@ const ERROR_TOAST_TTL: Duration = Duration::from_secs(5);
 pub enum Mode {
     Normal,
     Search,
+    Rename,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +52,7 @@ enum NormalAction {
     CopyLine,
     Accept,
     SaveFavorite,
+    RenameFavorite,
     ToggleFavoritesView,
     EnterSearch,
     CycleSort,
@@ -81,6 +83,7 @@ pub struct App {
     pub favorite_cursor: usize,
     pub mode: Mode,
     pub query: String,
+    pub rename_input: String,
     pub sort: SortMode,
     pub sort_desc: bool,
     pub selected: HashSet<u64>,
@@ -110,6 +113,7 @@ impl App {
             favorite_cursor: 0,
             mode: Mode::Normal,
             query: String::new(),
+            rename_input: String::new(),
             sort: SortMode::Recency,
             sort_desc: false,
             selected: HashSet::new(),
@@ -183,7 +187,7 @@ impl App {
                 "enter=accept  y=copy  f=save fav  F=favorites  /=search  s=sort  space=select  q=quit"
             }
             View::Favorites => {
-                "enter=accept fav  f=unfavorite  y=copy fav  Y=copy line  J/K=block  F=history  /=search  q=quit"
+                "enter=accept fav  f=unfavorite  r=rename  y=copy fav  Y=copy line  J/K=block  F=history  /=search  q=quit"
             }
         }
     }
@@ -250,6 +254,7 @@ impl App {
                     self.apply_search_action(action);
                 }
             }
+            Mode::Rename => self.handle_rename_key(key),
         }
     }
 
@@ -294,6 +299,7 @@ impl App {
             NormalAction::CopyLine => self.copy_current_line_only(),
             NormalAction::Accept => self.accept_current_scope(),
             NormalAction::SaveFavorite => self.save_current_or_selected_favorite(),
+            NormalAction::RenameFavorite => self.start_rename_favorite(),
             NormalAction::ToggleFavoritesView => self.toggle_favorites_view(),
             NormalAction::EnterSearch => self.mode = Mode::Search,
             NormalAction::CycleSort => {
@@ -574,6 +580,94 @@ impl App {
         }
     }
 
+    fn start_rename_favorite(&mut self) {
+        if !matches!(self.view, View::Favorites) {
+            self.set_info_toast("Rename works in favorites view".to_string());
+            return;
+        }
+
+        let Some(block) = self.current_favorite_block() else {
+            self.set_error_toast("No favorite selected".to_string());
+            return;
+        };
+
+        self.rename_input = block.title.clone().unwrap_or_default();
+        self.mode = Mode::Rename;
+    }
+
+    fn handle_rename_key(&mut self, key: KeyEvent) {
+        if is_ctrl_char(&key, 'u') {
+            self.rename_input.clear();
+            return;
+        }
+
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = Mode::Normal;
+                self.rename_input.clear();
+            }
+            KeyCode::Enter => self.commit_rename(),
+            KeyCode::Backspace => {
+                self.rename_input.pop();
+            }
+            KeyCode::Char(c)
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && !key.modifiers.contains(KeyModifiers::ALT) =>
+            {
+                self.rename_input.push(c);
+            }
+            _ => {}
+        }
+    }
+
+    fn commit_rename(&mut self) {
+        self.mode = Mode::Normal;
+
+        let Some(row) = self.current_favorite_row() else {
+            self.rename_input.clear();
+            self.set_error_toast("No favorite selected".to_string());
+            return;
+        };
+
+        let trimmed = self.rename_input.trim().to_string();
+        let title = (!trimmed.is_empty()).then_some(trimmed);
+        self.rename_input.clear();
+
+        match self.favorites.rename_block(row.block_index, title) {
+            Ok(true) => self.set_info_toast("Renamed favorite".to_string()),
+            Ok(false) => self.set_error_toast("No favorite selected".to_string()),
+            Err(err) => self.set_error_toast(format!("Favorites error: {err}")),
+        }
+    }
+
+    /// Lines the next copy/accept would emit, with a panel title.
+    /// History: only when multiple entries selected. Favorites: current
+    /// block when it has more than one line.
+    pub fn copy_preview(&self) -> Option<(String, Vec<String>)> {
+        match self.view {
+            View::History => {
+                if self.selected.len() < 2 {
+                    return None;
+                }
+                let lines = self.selected_lines_in_order_owned();
+                let title = format!("copy preview ({} lines)", lines.len());
+                Some((title, lines))
+            }
+            View::Favorites => {
+                let block = self.current_favorite_block()?;
+                if block.lines.len() < 2 {
+                    return None;
+                }
+                let title = format!(
+                    "copy preview: {} ({} lines)",
+                    block.display_title(),
+                    block.lines.len()
+                );
+                Some((title, block.lines.clone()))
+            }
+        }
+    }
+
     fn toggle_favorites_view(&mut self) {
         self.mode = Mode::Normal;
         self.view = match self.view {
@@ -757,6 +851,7 @@ fn normal_action_for_key(key: KeyEvent) -> Option<NormalAction> {
         KeyCode::Char('y') => Some(NormalAction::Copy),
         KeyCode::Char('Y') => Some(NormalAction::CopyLine),
         KeyCode::Char('f') => Some(NormalAction::SaveFavorite),
+        KeyCode::Char('r') => Some(NormalAction::RenameFavorite),
         KeyCode::Char('F') => Some(NormalAction::ToggleFavoritesView),
         KeyCode::Char('/') => Some(NormalAction::EnterSearch),
         KeyCode::Char('s') => Some(NormalAction::CycleSort),
@@ -826,7 +921,11 @@ fn favorite_matches_query(block: &FavoriteBlock, needle: &str) -> bool {
         return true;
     }
 
-    block.lines.iter().any(|line| text_matches(line, needle))
+    block
+        .title
+        .as_deref()
+        .is_some_and(|title| text_matches(title, needle))
+        || block.lines.iter().any(|line| text_matches(line, needle))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1152,6 +1251,118 @@ mod tests {
         assert_eq!(app.favorites.blocks.len(), 1);
         assert_eq!(app.favorites.blocks[0].lines, vec!["three"]);
         assert!(app.favorite_cursor < app.favorite_rows.len());
+    }
+
+    #[test]
+    fn rename_sets_custom_title_and_empty_reverts_to_default() {
+        let mut favorites = FavoritesStore::new_in_memory();
+        favorites
+            .add_block(vec!["one".to_string(), "two".to_string()])
+            .expect("add favorite");
+        let mut app = App::with_favorites(vec![mk_entry(0, "echo hi")], favorites);
+
+        app.handle_key(key(KeyCode::Char('F')));
+        app.handle_key(key(KeyCode::Char('r')));
+        assert_eq!(app.mode, Mode::Rename);
+
+        for c in "db setup".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.favorites.blocks[0].title.as_deref(), Some("db setup"));
+        assert_eq!(app.favorites.blocks[0].display_title(), "db setup");
+
+        app.handle_key(key(KeyCode::Char('r')));
+        assert_eq!(app.rename_input, "db setup");
+        app.handle_key(ctrl('u'));
+        app.handle_key(key(KeyCode::Enter));
+
+        assert_eq!(app.favorites.blocks[0].title, None);
+        assert_eq!(app.favorites.blocks[0].display_title(), "favorite 1");
+    }
+
+    #[test]
+    fn rename_esc_cancels_without_changes() {
+        let mut favorites = FavoritesStore::new_in_memory();
+        favorites
+            .add_block(vec!["one".to_string()])
+            .expect("add favorite");
+        let mut app = App::with_favorites(vec![mk_entry(0, "echo hi")], favorites);
+
+        app.handle_key(key(KeyCode::Char('F')));
+        app.handle_key(key(KeyCode::Char('r')));
+        app.handle_key(key(KeyCode::Char('x')));
+        app.handle_key(key(KeyCode::Esc));
+
+        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.favorites.blocks[0].title, None);
+        assert!(app.rename_input.is_empty());
+    }
+
+    #[test]
+    fn rename_in_history_view_does_not_enter_rename_mode() {
+        let mut app = App::new(vec![mk_entry(0, "echo hi")]);
+
+        app.handle_key(key(KeyCode::Char('r')));
+
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn copy_preview_requires_multiple_selected_in_history() {
+        let mut app = App::new(vec![mk_entry(0, "one"), mk_entry(1, "two")]);
+        assert!(app.copy_preview().is_none());
+
+        app.select_entry_by_id(0);
+        assert!(app.copy_preview().is_none());
+
+        app.select_entry_by_id(1);
+        let (title, lines) = app.copy_preview().expect("preview");
+        assert_eq!(title, "copy preview (2 lines)");
+        assert_eq!(lines, vec!["one", "two"]);
+    }
+
+    #[test]
+    fn copy_preview_shows_multi_line_favorite_block() {
+        let mut favorites = FavoritesStore::new_in_memory();
+        favorites
+            .add_block(vec!["single".to_string()])
+            .expect("add favorite 1");
+        favorites
+            .add_block(vec!["one".to_string(), "two".to_string()])
+            .expect("add favorite 2");
+        let mut app = App::with_favorites(vec![mk_entry(0, "echo hi")], favorites);
+
+        app.handle_key(key(KeyCode::Char('F')));
+        let (title, lines) = app.copy_preview().expect("preview");
+        assert_eq!(title, "copy preview: favorite 2 (2 lines)");
+        assert_eq!(lines, vec!["one", "two"]);
+
+        app.handle_key(key(KeyCode::Char('J')));
+        assert!(app.copy_preview().is_none());
+    }
+
+    #[test]
+    fn favorites_filter_matches_custom_title() {
+        let mut favorites = FavoritesStore::new_in_memory();
+        favorites
+            .add_block(vec!["npm run db:migrate".to_string()])
+            .expect("add favorite");
+        favorites
+            .rename_block(0, Some("deploy".to_string()))
+            .expect("rename");
+        let mut app = App::with_favorites(vec![mk_entry(0, "echo hi")], favorites);
+
+        app.handle_key(key(KeyCode::Char('F')));
+        app.query = "deploy".to_string();
+        app.rebuild_favorite_rows();
+        assert!(!app.favorite_rows.is_empty());
+
+        app.query = "nomatch".to_string();
+        app.rebuild_favorite_rows();
+        assert!(app.favorite_rows.is_empty());
     }
 
     #[test]

@@ -15,3 +15,6 @@ Thumbs.db
 # Env / local overrides
 .env
 .env.*
+
+# Personal notes (not for the repo)
+/personal/
