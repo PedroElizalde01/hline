@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-12
+
+### Added
+- Copy preview panel: on wide terminals, a side panel shows the exact lines the next copy/accept will emit (multi-selection in history, multi-line block in favorites)
+- `r` in favorites view renames the current block; custom titles persist in `favorites.json` and an empty title reverts to the default `favorite n`
+- Favorites search filter also matches custom block titles
+
 ### Fixed
 - `f` in favorites view now removes the current favorite block (previously there was no way to unfavorite)
 - Release workflow now fails if the tag does not match the `Cargo.toml` version, preventing releases that report a stale version and trigger endless update notices
