@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-18
+
 ### Changed
 - `hline <alias>` also copies the block to the clipboard. On Linux a detached helper process keeps the clipboard alive after hline exits
 
