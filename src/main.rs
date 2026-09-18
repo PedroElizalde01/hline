@@ -234,10 +234,12 @@ fn run_alias(name: Option<&str>) -> Result<()> {
     match favorites.find_by_alias(name) {
         Ok(block) => {
             let text = block.lines.join("\n");
-            println!("{text}");
-            if let Err(err) = clipboard::copy_and_detach(&text) {
-                eprintln!("hline: clipboard copy failed: {err:#}");
+            // Header on stderr so `eval "$(hline name)"` only sees the commands.
+            match clipboard::copy_and_detach(&text) {
+                Ok(()) => eprintln!("Copied to clipboard:"),
+                Err(err) => eprintln!("hline: clipboard copy failed: {err:#}"),
             }
+            println!("{text}");
             Ok(())
         }
         Err(candidates) if candidates.is_empty() => bail!("no favorite named {name:?}"),
