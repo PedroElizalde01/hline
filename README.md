@@ -54,6 +54,10 @@ hline --format zsh --file ~/.zsh_history
 hline --format fish --file ~/.local/share/fish/fish_history
 hline --check-updates
 hline --no-update-check
+hline --settings
+hline --list
+hline fav1
+hline init zsh
 ```
 
 By default `hline` auto-detects the history format and chooses a default history file from your shell when possible.
@@ -114,34 +118,46 @@ Press `F` to open favorites view:
 
 Favorites search matches any line in each saved block and shows whole matching blocks.
 
-## Shell Integration
+Favorites without a custom name are titled `favN`, so they work as aliases right away.
 
-Pressing `Enter` accepts the current selection and writes it to stdout after the TUI exits. That makes shell integration possible with command substitution.
+## Aliases
 
-Bash / Zsh example:
+Favorite titles double as aliases. `hline <name>` prints the block to stdout,
+`hline --list` shows every favorite. Lookup is case-insensitive, exact title
+first, then a unique prefix. A favorite titled `init` or `help` is shadowed by the subcommand.
 
 ```bash
-hline-widget() {
-  local cmd
-  cmd="$(hline)" || return
-  [[ -n "$cmd" ]] || return
-  READLINE_LINE="$cmd"
-  READLINE_POINT=${#READLINE_LINE}
+hline fav1
+hline deploy | xclip -selection clipboard
+hr() { eval "$(hline "$1")"; }   # run a favorite
+```
+
+## Shell Integration
+
+Pressing `Enter` accepts the current selection and writes it to stdout after the TUI exits.
+`hline init <shell>` prints a widget that binds a key to open `hline` and paste the accepted
+command into your prompt. Add one of these to your shell profile:
+
+```bash
+eval "$(hline init bash)"   # ~/.bashrc
+eval "$(hline init zsh)"    # ~/.zshrc
+hline init fish | source    # ~/.config/fish/config.fish
+```
+
+The key defaults to `Ctrl+R`. Change it in the settings file:
+
+```bash
+hline --settings   # prints the path and current values
+```
+
+```json
+{
+  "shell_key": "alt-h"
 }
-bind -x '"\C-r":hline-widget'
 ```
 
-Fish example:
-
-```fish
-function hline-widget
-    set cmd (hline)
-    or return
-    test -n "$cmd"; or return
-    commandline -r -- $cmd
-end
-bind \cr hline-widget
-```
+`shell_key` accepts `ctrl-<letter>` or `alt-<letter>`. Settings live in
+`~/.config/hline/settings.json` unless `XDG_CONFIG_HOME` is set.
 
 ## Build
 

@@ -151,3 +151,13 @@ case ":$PATH:" in
     echo "  export PATH=\"${BIN_DIR}:\$PATH\""
     ;;
 esac
+
+echo
+echo "Next steps:"
+case "$(basename "${SHELL:-}")" in
+  zsh)  echo "  echo 'eval \"\$(hline init zsh)\"' >> ~/.zshrc" ;;
+  fish) echo "  echo 'hline init fish | source' >> ~/.config/fish/config.fish" ;;
+  *)    echo "  echo 'eval \"\$(hline init bash)\"' >> ~/.bashrc" ;;
+esac
+echo "  Restart your shell, press Ctrl+R to open hline, ? inside for help."
+echo "  hline --help for aliases and settings."

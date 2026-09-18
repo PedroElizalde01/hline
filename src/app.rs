@@ -1280,7 +1280,7 @@ mod tests {
         app.handle_key(key(KeyCode::Enter));
 
         assert_eq!(app.favorites.blocks[0].title, None);
-        assert_eq!(app.favorites.blocks[0].display_title(), "favorite 1");
+        assert_eq!(app.favorites.blocks[0].display_title(), "fav1");
     }
 
     #[test]
@@ -1337,7 +1337,7 @@ mod tests {
 
         app.handle_key(key(KeyCode::Char('F')));
         let (title, lines) = app.copy_preview().expect("preview");
-        assert_eq!(title, "copy preview: favorite 2 (2 lines)");
+        assert_eq!(title, "copy preview: fav2 (2 lines)");
         assert_eq!(lines, vec!["one", "two"]);
 
         app.handle_key(key(KeyCode::Char('J')));

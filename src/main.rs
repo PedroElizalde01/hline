@@ -2,13 +2,14 @@ mod app;
 mod clipboard;
 mod favorites;
 mod history;
+mod settings;
 mod sort;
 mod ui;
 mod update;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use app::App;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crossterm::event::{self, Event, KeyEventKind};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
@@ -29,7 +30,19 @@ use std::time::Duration;
     author,
     version,
     about = "Browse shell history in a centered-cursor TUI",
-    long_about = None
+    long_about = None,
+    after_help = "\
+Setup:
+  eval \"$(hline init bash)\"        add to ~/.bashrc
+  eval \"$(hline init zsh)\"         add to ~/.zshrc
+  hline init fish | source         add to ~/.config/fish/config.fish
+  Then press Ctrl+R (change with shell_key in `hline --settings`).
+
+Aliases:
+  Favorites are titled favN by default, rename with `r` in the favorites view.
+  hline fav1                       print favorite to stdout
+  hr() { eval \"$(hline \"$1\")\"; }   run a favorite
+  Press ? inside the TUI for keybindings."
 )]
 struct Cli {
     #[arg(long, value_name = "PATH", help = "History file to load")]
@@ -43,6 +56,26 @@ struct Cli {
     check_updates: bool,
     #[arg(long, help = "Skip the automatic daily update check")]
     no_update_check: bool,
+    #[arg(long, help = "Print the settings file path and contents, creating defaults if missing")]
+    settings: bool,
+    #[arg(long, help = "List favorites and their commands")]
+    list: bool,
+    #[arg(
+        value_name = "ALIAS",
+        help = "Print the favorite with this title to stdout instead of opening the TUI"
+    )]
+    alias: Option<String>,
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Print the shell widget snippet for `eval "$(hline init <shell>)"`
+    Init {
+        #[arg(value_name = "SHELL", help = "bash, zsh or fish")]
+        shell: String,
+    },
 }
 
 enum TerminalWriter {
@@ -150,6 +183,19 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if cli.settings {
+        return settings::print_settings();
+    }
+
+    if let Some(Command::Init { shell }) = cli.command {
+        print!("{}", settings::init_snippet(&shell, &settings::load()?)?);
+        return Ok(());
+    }
+
+    if cli.list || cli.alias.is_some() {
+        return run_alias(cli.alias.as_deref());
+    }
+
     let path = cli.file.unwrap_or_else(|| default_history_path(cli.format));
     let entries = load_history(&path, cli.format)
         .with_context(|| format!("failed loading history from {}", path.display()))?;
@@ -164,6 +210,31 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn run_alias(name: Option<&str>) -> Result<()> {
+    let favorites = FavoritesStore::load_default().context("failed loading favorites")?;
+    let Some(name) = name else {
+        for block in &favorites.blocks {
+            println!("{}", block.display_title());
+            for line in &block.lines {
+                println!("  {line}");
+            }
+        }
+        return Ok(());
+    };
+
+    match favorites.find_by_alias(name) {
+        Ok(block) => {
+            println!("{}", block.lines.join("\n"));
+            Ok(())
+        }
+        Err(candidates) if candidates.is_empty() => bail!("no favorite named {name:?}"),
+        Err(candidates) => bail!(
+            "ambiguous favorite {name:?}, matches: {}",
+            candidates.join(", ")
+        ),
+    }
 }
 
 fn run_tui(mut app: App) -> Result<Option<String>> {

@@ -7,6 +7,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-18
+
+### Added
+- `hline <alias>` prints the favorite block with that title to stdout; `hline --list` lists all favorites. Lookup is case-insensitive, exact title first, then unique prefix
+- Default favorite title is now `favN` so every favorite is usable as an alias without renaming
+- `hline init bash|zsh|fish` prints the shell widget snippet; the bound key comes from `shell_key` in the settings file
+- `hline --settings` prints the settings file path and contents, creating `~/.config/hline/settings.json` with defaults on first run
+- Setup, alias, and settings docs in the `?` help overlay, `hline --help`, and the installer next-steps output
+
+### Fixed
+- README zsh widget used bash-only `bind -x`; the generated zsh snippet now uses `zle -N` and `bindkey`
+
 ## [0.2.0] - 2026-06-12
 
 ### Added

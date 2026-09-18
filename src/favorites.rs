@@ -15,7 +15,7 @@ impl FavoriteBlock {
     pub fn display_title(&self) -> String {
         self.title
             .clone()
-            .unwrap_or_else(|| format!("favorite {}", self.id))
+            .unwrap_or_else(|| format!("fav{}", self.id))
     }
 }
 
@@ -120,6 +120,28 @@ impl FavoritesStore {
         Ok(true)
     }
 
+    /// Exact case-insensitive title match first, then a unique prefix match.
+    pub fn find_by_alias(&self, alias: &str) -> std::result::Result<&FavoriteBlock, Vec<String>> {
+        let needle = alias.to_lowercase();
+        if let Some(block) = self
+            .blocks
+            .iter()
+            .find(|block| block.display_title().to_lowercase() == needle)
+        {
+            return Ok(block);
+        }
+
+        let prefixed: Vec<&FavoriteBlock> = self
+            .blocks
+            .iter()
+            .filter(|block| block.display_title().to_lowercase().starts_with(&needle))
+            .collect();
+        match prefixed.as_slice() {
+            [block] => Ok(block),
+            _ => Err(prefixed.iter().map(|block| block.display_title()).collect()),
+        }
+    }
+
     fn persist(&self) -> Result<()> {
         let Some(path) = &self.path else {
             return Ok(());
@@ -149,21 +171,20 @@ pub enum AddFavoriteResult {
     Empty,
 }
 
-pub fn default_favorites_path() -> PathBuf {
+pub fn config_dir() -> PathBuf {
     if let Ok(config_home) = std::env::var("XDG_CONFIG_HOME") {
-        return PathBuf::from(config_home)
-            .join("hline")
-            .join("favorites.json");
+        return PathBuf::from(config_home).join("hline");
     }
 
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home)
-            .join(".config")
-            .join("hline")
-            .join("favorites.json");
+        return PathBuf::from(home).join(".config").join("hline");
     }
 
-    Path::new(".").join(".hline-favorites.json")
+    Path::new(".").join(".hline")
+}
+
+pub fn default_favorites_path() -> PathBuf {
+    config_dir().join("favorites.json")
 }
 
 #[cfg(test)]
@@ -224,7 +245,7 @@ mod tests {
         store
             .add_block(vec!["cargo build".to_string()])
             .expect("add");
-        assert_eq!(store.blocks[0].display_title(), "favorite 1");
+        assert_eq!(store.blocks[0].display_title(), "fav1");
 
         assert!(store
             .rename_block(0, Some("build stuff".to_string()))
@@ -234,6 +255,25 @@ mod tests {
         let loaded = FavoritesStore::load_from_path(path).expect("reload");
         assert_eq!(loaded.blocks[0].title.as_deref(), Some("build stuff"));
         assert_eq!(loaded.blocks[0].display_title(), "build stuff");
+    }
+
+    #[test]
+    fn find_by_alias_prefers_exact_then_unique_prefix() {
+        let mut store = FavoritesStore::new_in_memory();
+        store.add_block(vec!["one".to_string()]).expect("add");
+        store.add_block(vec!["two".to_string()]).expect("add");
+        store
+            .rename_block(0, Some("Deploy".to_string()))
+            .expect("rename");
+        store.add_block(vec!["three".to_string()]).expect("add");
+
+        assert_eq!(store.find_by_alias("FAV1").map(|b| b.id), Ok(1));
+        assert_eq!(store.find_by_alias("dep").map(|b| b.id), Ok(2));
+        assert_eq!(
+            store.find_by_alias("fav"),
+            Err(vec!["fav3".to_string(), "fav1".to_string()])
+        );
+        assert_eq!(store.find_by_alias("zzz"), Err(vec![]));
     }
 
     #[test]
