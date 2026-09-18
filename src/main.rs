@@ -40,7 +40,7 @@ Setup:
 
 Aliases:
   Favorites are titled favN by default, rename with `r` in the favorites view.
-  hline fav1                       print favorite to stdout
+  hline fav1                       print favorite to stdout and copy it
   hr() { eval \"$(hline \"$1\")\"; }   run a favorite
   Press ? inside the TUI for keybindings."
 )]
@@ -60,9 +60,11 @@ struct Cli {
     settings: bool,
     #[arg(long, help = "List favorites and their commands")]
     list: bool,
+    #[arg(long, hide = true)]
+    clipboard_wait: bool,
     #[arg(
         value_name = "ALIAS",
-        help = "Print the favorite with this title to stdout instead of opening the TUI"
+        help = "Print the favorite with this title to stdout and copy it to the clipboard"
     )]
     alias: Option<String>,
     #[command(subcommand)]
@@ -187,6 +189,11 @@ fn main() -> Result<()> {
         return settings::print_settings();
     }
 
+    #[cfg(target_os = "linux")]
+    if cli.clipboard_wait {
+        return clipboard::hold_clipboard_from_stdin();
+    }
+
     if let Some(Command::Init { shell }) = cli.command {
         print!("{}", settings::init_snippet(&shell, &settings::load()?)?);
         return Ok(());
@@ -226,7 +233,11 @@ fn run_alias(name: Option<&str>) -> Result<()> {
 
     match favorites.find_by_alias(name) {
         Ok(block) => {
-            println!("{}", block.lines.join("\n"));
+            let text = block.lines.join("\n");
+            println!("{text}");
+            if let Err(err) = clipboard::copy_and_detach(&text) {
+                eprintln!("hline: clipboard copy failed: {err:#}");
+            }
             Ok(())
         }
         Err(candidates) if candidates.is_empty() => bail!("no favorite named {name:?}"),

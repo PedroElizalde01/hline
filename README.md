@@ -13,7 +13,9 @@ Shell history TUI
 
 ---
 
-Shell history TUI for Linux and macOS.
+Shell history TUI for Linux and macOS. More than a Ctrl+R.
+
+Yes, your shell already has Ctrl+R. `hline` takes over that key and gives you a list you can actually see, plus favorites, aliases, multi-select, and time filters.
 
 `hline` lets you browse Bash, Zsh, and Fish history with live filtering, timestamp-aware sorting, multi-select, clipboard copy, persisted favorites, and stdout accept flow for shell widgets.
 
@@ -122,13 +124,12 @@ Favorites without a custom name are titled `favN`, so they work as aliases right
 
 ## Aliases
 
-Favorite titles double as aliases. `hline <name>` prints the block to stdout,
-`hline --list` shows every favorite. Lookup is case-insensitive, exact title
+Favorite titles double as aliases. `hline <name>` prints the block to stdout and copies it
+to the clipboard, `hline --list` shows every favorite. Lookup is case-insensitive, exact title
 first, then a unique prefix. A favorite titled `init` or `help` is shadowed by the subcommand.
 
 ```bash
 hline fav1
-hline deploy | xclip -selection clipboard
 hr() { eval "$(hline "$1")"; }   # run a favorite
 ```
 

@@ -18,7 +18,7 @@ Sorting: s cycle sort mode, S reverse sort direction (history only)
 Copy: y copy selected/current item
 Quit: q
 
-Aliases: favorite titles are aliases, default favN. `hline <title>` prints the block to stdout, `hline --list` shows all
+Aliases: favorite titles are aliases, default favN. `hline <title>` prints the block to stdout and copies it, `hline --list` shows all
 Run one: hr() { eval \"$(hline \"$1\")\"; }
 Shell widget: add eval \"$(hline init bash|zsh)\" or `hline init fish | source` to your shell profile, then press Ctrl+R
 Settings: hline --settings prints ~/.config/hline/settings.json, set shell_key to ctrl-<letter> or alt-<letter>
