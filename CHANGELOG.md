@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-09-18
+
 ### Changed
 - `hline <alias>` prints a `Copied to clipboard:` header on stderr before the commands, stdout stays eval-safe
 
