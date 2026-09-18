@@ -13,11 +13,22 @@ Shell history TUI
 
 ---
 
-Shell history TUI for Linux and macOS. More than a Ctrl+R.
+**Shell history TUI for Bash, Zsh, and Fish on Linux and macOS.** A Ctrl+R replacement written in Rust.
 
-Yes, your shell already has Ctrl+R. `hline` takes over that key and gives you a list you can actually see, plus favorites, aliases, multi-select, and time filters.
+Website: https://hline.vercel.app · Docs: https://hline.vercel.app/docs
 
-`hline` lets you browse Bash, Zsh, and Fish history with live filtering, timestamp-aware sorting, multi-select, clipboard copy, persisted favorites, and stdout accept flow for shell widgets.
+`hline` opens your shell history in a full-screen terminal UI with live filtering, date filters, timestamp-aware sorting, multi-select, clipboard copy, persisted favorites, and aliases. Press Enter and the command lands in your prompt.
+
+## Features
+
+- Bash, Zsh, and Fish history, auto-detected, with timestamps when the format has them
+- Live text filter plus `after:`, `before:`, `on:` date filters
+- Sort by recency, timestamp, length, or alphabetically
+- Multi-select, copy to clipboard, or accept to stdout for shell widgets
+- Favorites: save one line or a multi-line block, rename it, jump between blocks
+- Aliases: `hline <favorite>` prints the block and copies it to the clipboard
+- `hline init bash|zsh|fish` prints a widget that binds Ctrl+R (configurable)
+- Single static binary, no daemon, no database, your history file stays the source of truth
 
 ## Install
 
@@ -173,6 +184,18 @@ cargo build --release
 git tag v0.1.5
 git push origin main v0.1.5
 ```
+
+## Compared to other history tools
+
+| | hline | fzf history widget | atuin | mcfly |
+| --- | --- | --- | --- | --- |
+| Source of truth | your history file | your history file | own SQLite database, optional sync | own SQLite database |
+| Multi-line favorites as aliases | yes | no | no | no |
+| Multi-select and clipboard copy | yes | select only | no | no |
+| Date filters | yes | no | yes | yes |
+| Daemon or background process | no | no | optional | no |
+
+Pick fzf if you already use it everywhere, atuin if you want synced history across machines. Pick hline if you want a visible list, favorites you can call by name, and nothing else running.
 
 ## License
 
