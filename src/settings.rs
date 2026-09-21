@@ -21,6 +21,24 @@ pub enum Behaviour {
 }
 
 impl Behaviour {
+    pub const ALL: [Self; 3] = [Self::Print, Self::Copy, Self::Full];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Print => "print",
+            Self::Copy => "copy",
+            Self::Full => "full",
+        }
+    }
+
+    pub fn summary(self) -> &'static str {
+        match self {
+            Self::Print => "commands to stdout, nothing else",
+            Self::Copy => "clipboard plus stdout (default)",
+            Self::Full => "clipboard, commands on stderr, then runs them",
+        }
+    }
+
     pub fn copies(self) -> bool {
         matches!(self, Self::Copy | Self::Full)
     }
@@ -84,6 +102,20 @@ pub fn print_settings() -> Result<()> {
     println!("shell_key: ctrl-<letter> or alt-<letter>, used by `hline init <shell>`");
     println!("alias_behaviour: print (stdout only), copy (clipboard + stdout), full (also runs)");
     println!("                 override once with `hline <alias> --behaviour full`");
+    Ok(())
+}
+
+/// Answer for a bare `hline --behaviour`.
+pub fn print_behaviour(current: Behaviour) -> Result<()> {
+    println!("alias_behaviour: {}", current.name());
+    println!();
+    for behaviour in Behaviour::ALL {
+        let marker = if behaviour == current { ">" } else { " " };
+        println!("{marker} {:<6} {}", behaviour.name(), behaviour.summary());
+    }
+    println!();
+    println!("Change it in {}", settings_path().display());
+    println!("Or for one run: hline <alias> --behaviour full");
     Ok(())
 }
 
@@ -176,6 +208,16 @@ bind {bind} hline-widget
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_behaviour_has_a_name_and_summary() {
+        for behaviour in Behaviour::ALL {
+            assert!(!behaviour.name().is_empty());
+            assert!(!behaviour.summary().is_empty());
+        }
+        assert_eq!(Behaviour::ALL.len(), 3);
+        assert_eq!(Behaviour::Full.name(), "full");
+    }
 
     #[test]
     fn behaviour_controls_copy_and_run() {

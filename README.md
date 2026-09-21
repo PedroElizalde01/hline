@@ -194,7 +194,13 @@ hline --settings   # prints the path and current values
 }
 ```
 
-Override it for one run with `--behaviour`:
+Check the current mode with a bare `--behaviour`:
+
+```bash
+hline --behaviour
+```
+
+Override it for one run by passing a value:
 
 ```bash
 hline deploy --behaviour print

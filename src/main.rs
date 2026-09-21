@@ -66,9 +66,10 @@ struct Cli {
         long,
         visible_alias = "behavior",
         value_name = "MODE",
-        help = "What an alias does this run: print, copy, or full (overrides alias_behaviour)"
+        num_args = 0..=1,
+        help = "What an alias does this run: print, copy, or full. Without a value, show the current mode"
     )]
-    behaviour: Option<settings::Behaviour>,
+    behaviour: Option<Option<settings::Behaviour>>,
     #[arg(
         value_name = "ALIAS",
         help = "Print the favorite with this title to stdout and copy it to the clipboard"
@@ -206,8 +207,13 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // `--behaviour` with no value is a question, not an override.
+    if matches!(cli.behaviour, Some(None)) && cli.alias.is_none() && !cli.list {
+        return settings::print_behaviour(settings::load()?.alias_behaviour);
+    }
+
     if cli.list || cli.alias.is_some() {
-        let behaviour = match cli.behaviour {
+        let behaviour = match cli.behaviour.flatten() {
             Some(behaviour) => behaviour,
             None => settings::load()?.alias_behaviour,
         };

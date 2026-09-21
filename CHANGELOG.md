@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- `hline --behaviour` with no value prints the current alias mode and the available ones
+
 ## [0.2.4] - 2026-09-21
 
 ### Added
