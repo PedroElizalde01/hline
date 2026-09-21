@@ -44,6 +44,12 @@ Then run:
 hline
 ```
 
+Or install from crates.io. The crate is `hline-tui` because `hline` was taken, the command it installs is `hline`:
+
+```bash
+cargo install hline-tui
+```
+
 Install a specific version:
 
 ```bash

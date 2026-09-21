@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+- Crate renamed to `hline-tui` for crates.io publishing, the installed binary is still `hline`
+
 ## [0.2.3] - 2026-09-18
 
 ### Changed

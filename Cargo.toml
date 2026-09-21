@@ -1,14 +1,22 @@
 [package]
-name = "hline"
+name = "hline-tui"
 version = "0.2.3"
 edition = "2021"
 rust-version = "1.78"
 authors = ["hline contributors"]
-description = "Browse shell history with a centered cursor TUI"
+description = "Shell history TUI for Bash, Zsh, and Fish. A Ctrl+R replacement with live filtering, favorites, and aliases. Installs as `hline`."
 readme = "README.md"
 license = "MIT"
-keywords = ["shell", "history", "tui", "cli"]
-categories = ["command-line-utilities"]
+repository = "https://github.com/PedroElizalde01/hline"
+homepage = "https://hline.vercel.app"
+documentation = "https://hline.vercel.app/docs"
+keywords = ["shell", "history", "tui", "cli", "zsh"]
+categories = ["command-line-utilities", "command-line-interface"]
+exclude = ["/dist", "/personal", "/assets", "/.github", "/scripts"]
+
+[[bin]]
+name = "hline"
+path = "src/main.rs"
 
 [profile.release]
 lto = "thin"
