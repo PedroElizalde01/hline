@@ -1,3 +1,4 @@
+use crate::settings::Behaviour;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -8,6 +9,14 @@ pub struct FavoriteBlock {
     pub id: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// Per-favorite override for the global `alias_behaviour`.
+    #[serde(
+        default,
+        alias = "behavior",
+        rename = "behaviour",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub behaviour: Option<Behaviour>,
     pub lines: Vec<String>,
 }
 
@@ -93,6 +102,7 @@ impl FavoritesStore {
             FavoriteBlock {
                 id,
                 title: None,
+                behaviour: None,
                 lines,
             },
         );
@@ -120,26 +130,47 @@ impl FavoritesStore {
         Ok(true)
     }
 
-    /// Exact case-insensitive title match first, then a unique prefix match.
-    pub fn find_by_alias(&self, alias: &str) -> std::result::Result<&FavoriteBlock, Vec<String>> {
+    /// Index of the matching block: exact case-insensitive title first, then a
+    /// unique prefix. On failure, the titles that tied.
+    pub fn find_by_alias(&self, alias: &str) -> std::result::Result<usize, Vec<String>> {
         let needle = alias.to_lowercase();
-        if let Some(block) = self
+        if let Some(index) = self
             .blocks
             .iter()
-            .find(|block| block.display_title().to_lowercase() == needle)
+            .position(|block| block.display_title().to_lowercase() == needle)
         {
-            return Ok(block);
+            return Ok(index);
         }
 
-        let prefixed: Vec<&FavoriteBlock> = self
+        let prefixed: Vec<usize> = self
             .blocks
             .iter()
-            .filter(|block| block.display_title().to_lowercase().starts_with(&needle))
+            .enumerate()
+            .filter(|(_, block)| block.display_title().to_lowercase().starts_with(&needle))
+            .map(|(index, _)| index)
             .collect();
         match prefixed.as_slice() {
-            [block] => Ok(block),
-            _ => Err(prefixed.iter().map(|block| block.display_title()).collect()),
+            [index] => Ok(*index),
+            _ => Err(prefixed
+                .iter()
+                .map(|index| self.blocks[*index].display_title())
+                .collect()),
         }
+    }
+
+    /// Remember a behaviour on one block so plain `hline <alias>` reuses it.
+    pub fn set_behaviour(&mut self, block_index: usize, behaviour: Behaviour) -> Result<bool> {
+        let Some(block) = self.blocks.get_mut(block_index) else {
+            return Ok(false);
+        };
+
+        if block.behaviour == Some(behaviour) {
+            return Ok(false);
+        }
+
+        block.behaviour = Some(behaviour);
+        self.persist()?;
+        Ok(true)
     }
 
     fn persist(&self) -> Result<()> {
@@ -267,13 +298,36 @@ mod tests {
             .expect("rename");
         store.add_block(vec!["three".to_string()]).expect("add");
 
-        assert_eq!(store.find_by_alias("FAV1").map(|b| b.id), Ok(1));
-        assert_eq!(store.find_by_alias("dep").map(|b| b.id), Ok(2));
+        assert_eq!(
+            store.find_by_alias("FAV1").map(|i| store.blocks[i].id),
+            Ok(1)
+        );
+        assert_eq!(
+            store.find_by_alias("dep").map(|i| store.blocks[i].id),
+            Ok(2)
+        );
         assert_eq!(
             store.find_by_alias("fav"),
             Err(vec!["fav3".to_string(), "fav1".to_string()])
         );
         assert_eq!(store.find_by_alias("zzz"), Err(vec![]));
+    }
+
+    #[test]
+    fn behaviour_persists_per_block_and_old_files_have_none() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("favorites.json");
+
+        let mut store = FavoritesStore::load_from_path(path.clone()).expect("load empty");
+        store.add_block(vec!["npm run dev".to_string()]).expect("add");
+        assert_eq!(store.blocks[0].behaviour, None);
+
+        assert!(store.set_behaviour(0, Behaviour::Full).expect("set"));
+        assert!(!store.set_behaviour(0, Behaviour::Full).expect("already set"));
+        assert!(!store.set_behaviour(9, Behaviour::Full).expect("out of range"));
+
+        let loaded = FavoritesStore::load_from_path(path).expect("reload");
+        assert_eq!(loaded.blocks[0].behaviour, Some(Behaviour::Full));
     }
 
     #[test]

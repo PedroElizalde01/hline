@@ -207,17 +207,18 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // `--behaviour` with no value is a question, not an override.
-    if matches!(cli.behaviour, Some(None)) && cli.alias.is_none() && !cli.list {
-        return settings::print_behaviour(settings::load()?.alias_behaviour);
+    if cli.alias.is_none() && !cli.list {
+        match cli.behaviour {
+            // `--behaviour` with no value is a question, not an override.
+            Some(None) => return settings::print_behaviour(),
+            // `--behaviour MODE` with no alias sets the global default.
+            Some(Some(behaviour)) => return settings::set_behaviour(behaviour),
+            None => {}
+        }
     }
 
     if cli.list || cli.alias.is_some() {
-        let behaviour = match cli.behaviour.flatten() {
-            Some(behaviour) => behaviour,
-            None => settings::load()?.alias_behaviour,
-        };
-        return run_alias(cli.alias.as_deref(), behaviour);
+        return run_alias(cli.alias.as_deref(), cli.behaviour.flatten());
     }
 
     let path = cli.file.unwrap_or_else(|| default_history_path(cli.format));
@@ -236,11 +237,14 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_alias(name: Option<&str>, behaviour: settings::Behaviour) -> Result<()> {
-    let favorites = FavoritesStore::load_default().context("failed loading favorites")?;
+fn run_alias(name: Option<&str>, requested: Option<settings::Behaviour>) -> Result<()> {
+    let mut favorites = FavoritesStore::load_default().context("failed loading favorites")?;
     let Some(name) = name else {
         for block in &favorites.blocks {
-            println!("{}", block.display_title());
+            match block.behaviour {
+                Some(behaviour) => println!("{} [{}]", block.display_title(), behaviour.name()),
+                None => println!("{}", block.display_title()),
+            }
             for line in &block.lines {
                 println!("  {line}");
             }
@@ -249,7 +253,23 @@ fn run_alias(name: Option<&str>, behaviour: settings::Behaviour) -> Result<()> {
     };
 
     match favorites.find_by_alias(name) {
-        Ok(block) => {
+        Ok(index) => {
+            // A mode passed with an alias sticks to that favorite.
+            if let Some(behaviour) = requested {
+                if favorites.set_behaviour(index, behaviour)? {
+                    eprintln!(
+                        "{} now defaults to {}",
+                        favorites.blocks[index].display_title(),
+                        behaviour.name()
+                    );
+                }
+            }
+
+            let block = &favorites.blocks[index];
+            let behaviour = match block.behaviour {
+                Some(behaviour) => behaviour,
+                None => settings::load()?.alias_behaviour,
+            };
             let text = block.lines.join("\n");
             // Headers on stderr so `eval "$(hline name)"` only sees the commands.
             if behaviour.copies() {

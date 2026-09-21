@@ -194,18 +194,17 @@ hline --settings   # prints the path and current values
 }
 ```
 
-Check the current mode with a bare `--behaviour`:
+`--behaviour` reads and writes those modes:
 
 ```bash
-hline --behaviour
+hline --behaviour              # show the default and any per-favorite modes
+hline --behaviour full         # change the default
+hline deploy --behaviour full  # change one favorite, then run it
 ```
 
-Override it for one run by passing a value:
-
-```bash
-hline deploy --behaviour print
-hline deploy --behaviour full
-```
+A mode passed with a favorite sticks to that favorite, so plain `hline deploy`
+keeps using it. Favorites without their own mode follow `alias_behaviour`.
+`hline --list` marks the ones that carry a mode.
 
 Under `full`, stdout carries only the output of the commands, so pipes keep working.
 Commands run in a child shell, so `cd` and exports do not affect your current shell.

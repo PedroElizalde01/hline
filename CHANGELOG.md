@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- Favorites remember a behaviour: `hline <alias> --behaviour full` stores it on that favorite, so plain `hline <alias>` reuses it, and `hline --list` marks them
+- `hline --behaviour MODE` with no alias changes the default and writes it to the settings file
+
 ## [0.2.5] - 2026-09-21
 
 ### Added

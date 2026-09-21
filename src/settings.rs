@@ -106,16 +106,49 @@ pub fn print_settings() -> Result<()> {
 }
 
 /// Answer for a bare `hline --behaviour`.
-pub fn print_behaviour(current: Behaviour) -> Result<()> {
+pub fn print_behaviour() -> Result<()> {
+    let current = load()?.alias_behaviour;
     println!("alias_behaviour: {}", current.name());
     println!();
     for behaviour in Behaviour::ALL {
         let marker = if behaviour == current { ">" } else { " " };
         println!("{marker} {:<6} {}", behaviour.name(), behaviour.summary());
     }
+
+    let overrides = crate::favorites::FavoritesStore::load_default()?;
+    let mut overridden = overrides
+        .blocks
+        .iter()
+        .filter_map(|block| block.behaviour.map(|b| (block.display_title(), b)))
+        .peekable();
+    if overridden.peek().is_some() {
+        println!();
+        println!("favorites with their own mode:");
+        for (title, behaviour) in overridden {
+            println!("  {title} [{}]", behaviour.name());
+        }
+    }
+
     println!();
-    println!("Change it in {}", settings_path().display());
-    println!("Or for one run: hline <alias> --behaviour full");
+    println!("hline --behaviour MODE          change the default");
+    println!("hline <alias> --behaviour MODE  change one favorite");
+    Ok(())
+}
+
+/// `hline --behaviour MODE` with no alias: change the global default.
+pub fn set_behaviour(behaviour: Behaviour) -> Result<()> {
+    let path = settings_path();
+    let mut settings = load()?;
+    settings.alias_behaviour = behaviour;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, serde_json::to_string_pretty(&settings)?)
+        .with_context(|| format!("failed to write settings file: {}", path.display()))?;
+
+    println!("alias_behaviour: {}", behaviour.name());
+    println!("{}", path.display());
     Ok(())
 }
 
