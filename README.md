@@ -177,6 +177,38 @@ hline --settings   # prints the path and current values
 `shell_key` accepts `ctrl-<letter>` or `alt-<letter>`. Settings live in
 `~/.config/hline/settings.json` unless `XDG_CONFIG_HOME` is set.
 
+### Alias behaviour
+
+`alias_behaviour` decides what `hline <alias>` does with the block:
+
+| Value | Copies to clipboard | Prints commands | Runs them |
+| --- | --- | --- | --- |
+| `print` | no | stdout | no |
+| `copy` (default) | yes | stdout | no |
+| `full` | yes | stderr | yes |
+
+```json
+{
+  "shell_key": "ctrl-r",
+  "alias_behaviour": "full"
+}
+```
+
+Override it for one run with `--behaviour`:
+
+```bash
+hline deploy --behaviour print
+hline deploy --behaviour full
+```
+
+Under `full`, stdout carries only the output of the commands, so pipes keep working.
+Commands run in a child shell, so `cd` and exports do not affect your current shell.
+For that, keep using a shell function:
+
+```bash
+hr() { eval "$(hline "$1" --behaviour print)"; }
+```
+
 ## Build
 
 ```bash

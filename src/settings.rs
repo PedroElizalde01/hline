@@ -5,16 +5,49 @@ use std::path::PathBuf;
 
 use crate::favorites::config_dir;
 
+/// What `hline <alias>` does with the favorite block.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
+#[clap(rename_all = "lowercase")]
+pub enum Behaviour {
+    /// Print to stdout only. Safe for `eval "$(hline name)"`.
+    Print,
+    /// Copy to the clipboard and print.
+    Copy,
+    /// Copy, print, and run the commands.
+    #[serde(alias = "run")]
+    #[clap(alias = "run")]
+    Full,
+}
+
+impl Behaviour {
+    pub fn copies(self) -> bool {
+        matches!(self, Self::Copy | Self::Full)
+    }
+
+    pub fn runs(self) -> bool {
+        matches!(self, Self::Full)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Settings {
     /// Shell widget key: "ctrl-<letter>" or "alt-<letter>".
     pub shell_key: String,
+    /// What `hline <alias>` does: print, copy, or full.
+    #[serde(default = "default_behaviour", alias = "alias_behavior")]
+    pub alias_behaviour: Behaviour,
+}
+
+fn default_behaviour() -> Behaviour {
+    Behaviour::Copy
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             shell_key: "ctrl-r".to_string(),
+            alias_behaviour: default_behaviour(),
         }
     }
 }
@@ -49,6 +82,8 @@ pub fn print_settings() -> Result<()> {
     println!("{}", serde_json::to_string_pretty(&settings)?);
     println!();
     println!("shell_key: ctrl-<letter> or alt-<letter>, used by `hline init <shell>`");
+    println!("alias_behaviour: print (stdout only), copy (clipboard + stdout), full (also runs)");
+    println!("                 override once with `hline <alias> --behaviour full`");
     Ok(())
 }
 
@@ -143,6 +178,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn behaviour_controls_copy_and_run() {
+        assert!(!Behaviour::Print.copies() && !Behaviour::Print.runs());
+        assert!(Behaviour::Copy.copies() && !Behaviour::Copy.runs());
+        assert!(Behaviour::Full.copies() && Behaviour::Full.runs());
+    }
+
+    #[test]
+    fn settings_default_behaviour_and_old_files_without_one() {
+        assert_eq!(Settings::default().alias_behaviour, Behaviour::Copy);
+
+        let old: Settings = serde_json::from_str(r#"{"shell_key":"alt-h"}"#).expect("old file");
+        assert_eq!(old.alias_behaviour, Behaviour::Copy);
+
+        let run: Settings = serde_json::from_str(r#"{"shell_key":"ctrl-r","alias_behaviour":"run"}"#)
+            .expect("run alias");
+        assert_eq!(run.alias_behaviour, Behaviour::Full);
+
+        let us: Settings = serde_json::from_str(r#"{"shell_key":"ctrl-r","alias_behavior":"print"}"#)
+            .expect("american spelling");
+        assert_eq!(us.alias_behaviour, Behaviour::Print);
+    }
+
+    #[test]
     fn parses_key_specs() {
         assert_eq!(parse_key("ctrl-r").unwrap(), Key::Ctrl('r'));
         assert_eq!(parse_key("Alt+F").unwrap(), Key::Alt('f'));
@@ -155,6 +213,7 @@ mod tests {
     fn snippets_use_configured_key() {
         let settings = Settings {
             shell_key: "alt-f".to_string(),
+            ..Settings::default()
         };
         assert!(init_snippet("bash", &settings).unwrap().contains(r#"'"\ef":hline-widget'"#));
         assert!(init_snippet("zsh", &settings).unwrap().contains("bindkey '^[f'"));

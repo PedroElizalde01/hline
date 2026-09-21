@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- `alias_behaviour` setting and `--behaviour` flag with `print`, `copy` (default), and `full` modes, where `full` also runs the block in a child shell
+
 ### Changed
 - Crate renamed to `hline-tui` for crates.io publishing, the installed binary is still `hline`
 

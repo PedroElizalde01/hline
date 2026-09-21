@@ -63,6 +63,13 @@ struct Cli {
     #[arg(long, hide = true)]
     clipboard_wait: bool,
     #[arg(
+        long,
+        visible_alias = "behavior",
+        value_name = "MODE",
+        help = "What an alias does this run: print, copy, or full (overrides alias_behaviour)"
+    )]
+    behaviour: Option<settings::Behaviour>,
+    #[arg(
         value_name = "ALIAS",
         help = "Print the favorite with this title to stdout and copy it to the clipboard"
     )]
@@ -200,7 +207,11 @@ fn main() -> Result<()> {
     }
 
     if cli.list || cli.alias.is_some() {
-        return run_alias(cli.alias.as_deref());
+        let behaviour = match cli.behaviour {
+            Some(behaviour) => behaviour,
+            None => settings::load()?.alias_behaviour,
+        };
+        return run_alias(cli.alias.as_deref(), behaviour);
     }
 
     let path = cli.file.unwrap_or_else(|| default_history_path(cli.format));
@@ -219,7 +230,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run_alias(name: Option<&str>) -> Result<()> {
+fn run_alias(name: Option<&str>, behaviour: settings::Behaviour) -> Result<()> {
     let favorites = FavoritesStore::load_default().context("failed loading favorites")?;
     let Some(name) = name else {
         for block in &favorites.blocks {
@@ -234,10 +245,17 @@ fn run_alias(name: Option<&str>) -> Result<()> {
     match favorites.find_by_alias(name) {
         Ok(block) => {
             let text = block.lines.join("\n");
-            // Header on stderr so `eval "$(hline name)"` only sees the commands.
-            match clipboard::copy_and_detach(&text) {
-                Ok(()) => eprintln!("Copied to clipboard:"),
-                Err(err) => eprintln!("hline: clipboard copy failed: {err:#}"),
+            // Headers on stderr so `eval "$(hline name)"` only sees the commands.
+            if behaviour.copies() {
+                match clipboard::copy_and_detach(&text) {
+                    Ok(()) => eprintln!("Copied to clipboard:"),
+                    Err(err) => eprintln!("hline: clipboard copy failed: {err:#}"),
+                }
+            }
+            if behaviour.runs() {
+                // Preview on stderr so stdout carries only the commands' own output.
+                eprintln!("{text}");
+                return run_commands(&text);
             }
             println!("{text}");
             Ok(())
@@ -247,6 +265,25 @@ fn run_alias(name: Option<&str>) -> Result<()> {
             "ambiguous favorite {name:?}, matches: {}",
             candidates.join(", ")
         ),
+    }
+}
+
+/// Run the block in a child shell. `cd` and exports do not outlive it, so a
+/// shell function around `hline` stays the way to change the calling shell.
+fn run_commands(text: &str) -> Result<()> {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    eprintln!("Running:");
+    
+    let status = std::process::Command::new(&shell)
+        .arg("-c")
+        .arg(text)
+        .status()
+        .with_context(|| format!("failed to run commands with {shell}"))?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        std::process::exit(status.code().unwrap_or(1));
     }
 }
 
