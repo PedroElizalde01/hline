@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-09-21
+
 ### Added
 - `alias_behaviour` setting and `--behaviour` flag with `print`, `copy` (default), and `full` modes, where `full` also runs the block in a child shell
 
