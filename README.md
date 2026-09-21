@@ -44,13 +44,6 @@ Then run:
 hline
 ```
 
-Or with Homebrew on macOS and Linux:
-
-```bash
-brew tap PedroElizalde01/hline
-brew install hline
-```
-
 Or install from crates.io. The crate is `hline-tui` because `hline` was taken, the command it installs is `hline`:
 
 ```bash
