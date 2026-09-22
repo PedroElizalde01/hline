@@ -1,1 +1,0 @@
-Made hline: a shell history TUI for Bash, Zsh, and Fish. Ctrl+R shows you one match at a time — hline shows you the whole list, filters it with after:/before:/on:, and turns the commands you keep retyping into named aliases you run with `hline <name>`. One static Rust binary: cargo install hline-tui

@@ -20,4 +20,4 @@ Thumbs.db
 /personal/
 
 # generated video output, not part of the crate
-/brag-output/
+/brag-output*/
