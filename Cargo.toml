@@ -12,7 +12,7 @@ homepage = "https://hline.vercel.app"
 documentation = "https://hline.vercel.app/docs"
 keywords = ["shell", "history", "tui", "cli", "zsh"]
 categories = ["command-line-utilities", "command-line-interface"]
-exclude = ["/dist", "/personal", "/assets", "/.github", "/scripts"]
+exclude = ["/dist", "/personal", "/assets", "/.github", "/scripts", "/brag-output"]
 
 [[bin]]
 name = "hline"
